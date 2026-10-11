@@ -6,7 +6,7 @@
  *
  * channelKey 组成（对齐官方 per-account-channel-peer 隔离策略）：
  *   `${channel}:${botId}:${peerId}`
- *   例：qq:qqbot_xxx:8F3A...（openid）  wechat:acc_5f3a:user_9c2b@im.wechat
+ *   例：qq:qqbot_xxxx:8F3A...（openid）  wechat:acc_xxxx:user_xxxx@im.wechat
  *
  * 落盘：backend/data/channels/sessions.json（原子写）
  *   {
