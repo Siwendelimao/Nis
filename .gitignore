@@ -1,0 +1,77 @@
+# ─── NIS 开源版 · 仓库 .gitignore（来源：D:\nis-open-tools\templates\.gitignore）─────
+# 原则：源码进仓库，运行期产物 / 密钥 / 数据一律不进。
+# 本文件由 sync_to_release.mjs 从模板复制到发布目录 —— 改这里，别改发布目录那份。
+
+# 依赖
+node_modules/
+.pnpm-store/
+
+# 构建产物
+dist/
+dist-*/
+build/
+frontend/src-tauri/target/
+frontend/src-tauri/pack/
+setup/src-tauri/target/
+*.tsbuildinfo
+
+# 缓存
+.vite/
+.vite-*/
+.vite_dlocal/
+.cache/
+.turbo/
+
+# ─── 运行期数据（绝不入仓库：含密钥、会话、记忆、浏览器登录态）───────────
+data/
+backend/data/
+memory/
+backups/
+exports/
+logs/
+tool-output/
+browser-profile/
+session-assets/
+channel-workspaces/
+scheduled-workspaces/
+blackboard/
+notebook-assets/
+member-chats/
+releases/
+
+# ─── 配置：只提交示例模板，真实文件忽略 ──────────────────────────────────
+providers.json
+providers.json.bak*
+channels.json
+settings.json
+ui-state.json
+websearch.json
+tunnel.json
+tunnel_key
+tunnel_key.pub
+notebook.json
+scheduled-tasks.json
+background-tasks.json
+usage.json
+import-history.json
+models_dev_cache.json
+.env
+.env.local
+.env.*.local
+
+# ─── 备份 / 临时 / 系统 ──────────────────────────────────────────────────
+*.bak
+*.bak-*
+*.log
+*.tmp
+*.orig
+*.old
+*~
+Thumbs.db
+desktop.ini
+.DS_Store
+.workbuddy/
+.nis-history/
+.codebuddy/
+.zcode/
+.claude/

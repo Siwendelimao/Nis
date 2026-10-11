@@ -1,0 +1,994 @@
+@import "tailwindcss";
+
+/* 全站西文/数字换 Inter（与 ZCode 客户端同款：可变字体，字重轴 100-900 全量单文件）。
+   中文无对应字形时自动回退系统字体（Windows=微软雅黑），与 ZCode 的回退行为一致。 */
+@font-face {
+  font-family: "Inter";
+  src: url("./assets/fonts/Inter.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* 深色主题待开发：保留 dark: 变体定义（无 .dark 祖先时不生效），
+    后续实现深色时在根元素加 .dark 即可复用 */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-sans);
+}
+
+#app {
+  height: 100%;
+}
+
+.app-container {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.app-sidebar {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  bottom: 12px;
+  /* 低于弹窗遮罩(z-40)：弹窗打开时侧栏被半透明遮罩盖住，不可点击 */
+  z-index: 10;
+}
+
+.app-main {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #ffffff;
+  /* 0915：四角圆角对齐左侧栏（并随用户反馈再放大到 24px —— 16px 观感"不够大"） */
+  border-radius: 24px;
+}
+
+.custom-scroll::-webkit-scrollbar {
+  /* ★0930（反馈"滚动条不好选中"）：命中区从 6px 加宽到 12px ——
+     滑块本体仍 6px（透明边框撑出命中区，background-clip 只让背景填中间 padding-box）。 */
+  width: 12px;
+}
+
+.custom-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scroll::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+/* ★0930：悬停到滚动条上滑块加粗（10px）+ 加深；移开自动缩回。
+   （滚动条伪元素不支持过渡动画，是瞬时切换；命中区=滑块满宽 12px，好抓。） */
+.custom-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.25);
+  border-width: 1px;
+}
+/* 暗色：全局 html.dark 规则用 background 简写会把 background-clip 重置回 border-box
+   （透明边框失效、滑块变胖），这里以更高选择器权重单独钉住 padding-box。 */
+html.dark .custom-scroll::-webkit-scrollbar-thumb {
+  background-color: var(--nis-border-strong);
+  background-clip: padding-box;
+}
+html.dark .custom-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: #3a3a3a;
+  border-width: 1px;
+}
+
+/* ★0930 补刀（反馈"滚动条下半截悬停不变粗、往上一点可以"）：
+   根因不是 CSS —— 输入 dock 是整宽浮层（absolute inset-x-0 z-10），把滚动条底部整段盖住，
+   悬停/拖拽事件被这层透明区域吃掉。修法：浮层外层放行指针事件（磨砂视觉照常），
+   只有真实内容接事件；整宽的统计胶囊行/后台任务输入行只留内容可点，行本身放行。 */
+.input-dock { pointer-events: none; }
+.input-dock > * { pointer-events: auto; }
+.input-dock > .stats-line { pointer-events: none; }
+.stats-line .stats-pill { pointer-events: auto; }
+.input-dock > .bg-input-row { pointer-events: none; }
+.bg-input-row :is(input, button) { pointer-events: auto; }
+
+/* 0910 设置·通用页滑杆（压缩阈值/留存比例、背景浓度）：细轨+黑色圆点，深浅主题各一套 */
+.nis-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.12);
+  outline: none;
+  cursor: pointer;
+}
+.nis-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #111114;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  border: 2px solid #fff;
+  cursor: pointer;
+}
+.nis-range::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #111114;
+  border: 2px solid #fff;
+  cursor: pointer;
+}
+html.dark .nis-range { background: rgba(255, 255, 255, 0.14); }
+html.dark .nis-range::-webkit-slider-thumb { background: #e9e9ef; border-color: #161616; }
+html.dark .nis-range::-moz-range-thumb { background: #e9e9ef; border-color: #161616; }
+
+.nav-item.active {
+  background-color: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* ── 统一按钮体系（0903 拍板）：胶囊形、纯文字+背景（不带 icon）、hover 加深 ──
+   主=纯黑 / 副=灰 / 危险=红；三档尺寸 md(表单主操作) sm(常规) xs(紧凑行内)。
+   所有按钮自带按压/禁用/键盘焦点态，别再在组件里手写 bg-xxx hover 组合。 */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 9999px;
+  /* 400：清新感的字重基线（530 在按钮上偏重，0903 用户反馈） */
+  font-weight: 400;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease, opacity 0.15s ease, transform 0.06s ease;
+}
+.btn:active { transform: scale(0.98); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn:focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; }
+.btn-md { padding: 10px 24px; font-size: 13px; }
+.btn-sm { padding: 7px 16px; font-size: 12px; }
+.btn-xs { padding: 5px 12px; font-size: 10px; }
+.btn-primary { background: #000000; color: #ffffff; }
+.btn-primary:hover { background: rgba(0, 0, 0, 0.8); }
+.btn-secondary { background: #f3f4f6; color: #6b7280; }  /* gray-100 / gray-500：淡字更清新 */
+.btn-secondary:hover { background: #e5e7eb; }           /* gray-200 */
+.btn-danger { background: #dc2626; color: #ffffff; }    /* red-600 */
+.btn-danger:hover { background: #b91c1c; }              /* red-700 */
+
+/* ═══════ 0906 深色主题（纯黑系，用户拍板色板 #0a0a0a/#111/#161616/#1d1d1d/#262626/#2e2e2e）═══════
+ * 策略=类级映射层：只在 html.dark 下生效，浅色主题零改动零风险。
+ * --dsw-* 令牌历史上从未定义（浅色下 var 用法回退 inherit，观感由 tailwind 类承载），
+ * 故仅在 dark 下补定义，不新增浅色值、避免改亮色观感。
+ * 注意：改本段任何规则后必须括号配平检查（tailwindcss/vite "Missing opening {" 白屏教训）。 */
+html.dark {
+  --nis-bg-app: #0a0a0a;
+  --nis-bg-panel: #111111;
+  --nis-bg-raised: #161616;
+  --nis-bg-hover: #1d1d1d;
+  --nis-border: #262626;
+  --nis-border-strong: #2e2e2e;
+  --nis-text-1: #e9e9ef;
+  --nis-text-2: #b9b9c2;
+  --nis-text-3: #83838d;
+  --nis-text-4: #5e5e68;
+  /* dsh 令牌（仅 dark） */
+  --dsw-alias-bg-base: #0a0a0a;
+  --dsw-alias-border-l1: #1d1d1d;
+  --dsw-alias-border-l2: #262626;
+  --dsw-alias-interactive-bg-hover: #1d1d1d;
+  --dsw-alias-interactive-bg-hover-solid: #262626;
+  --dsw-alias-label-caption: #5e5e68;
+  --dsw-alias-label-primary: #e9e9ef;
+  --dsw-alias-label-secondary: #b9b9c2;
+  --dsw-alias-label-tertiary: #83838d;
+  --dsw-alias-state-error-primary: #f87171;
+  --dsw-alias-state-success-primary: #4ade80;
+  --dsw-alias-state-warn-primary: #fbbf24;
+  --dsw-specific-bubble: #1a1d28;
+  --dsw-alias-label-primary-dimmed: #d4d4dc;
+  --dsw-static-amber-500: #f59e0b;
+  --dsw-static-deepseek-50: #14161d;
+  --dsw-static-deepseek-100: #1a2130;
+  --dsw-static-deepseek-200: #2b3245;
+  --dsw-static-deepseek-450: #6d7aa0;
+  --dsw-static-deepseek-500: #8b98c4;
+  --dsw-static-green-500: #22c55e;
+  --dsw-static-red-600: #ef4444;
+  --dsw-static-neutral-bluish-00: #0a0a0a;
+  --dsw-static-neutral-bluish-50: #101012;
+  --dsw-static-neutral-bluish-60: #111113;
+  --dsw-static-neutral-bluish-75: #161618;
+  --dsw-static-neutral-bluish-100: #1d1d20;
+  --dsw-static-neutral-bluish-150: #202024;
+  --dsw-static-neutral-bluish-200: #2a2a2e;
+  --dsw-static-neutral-bluish-300: #6f6f78;
+  --dsw-static-neutral-bluish-400: #8a8a93;
+  --dsw-static-neutral-bluish-500: #9a9aa2;
+  --dsw-static-neutral-bluish-600: #b0b0b8;
+  --dsw-static-neutral-bluish-700: #c9c9d1;
+  --dsw-static-neutral-bluish-750: #d8d8e0;
+  --dsw-static-neutral-bluish-800: #e2e2e8;
+  --dsw-static-neutral-bluish-850: #131316;
+  --dsw-static-neutral-bluish-900: #0f0f12;
+  --dsw-static-neutral-bluish-950: #0d0d10;
+  --dsw-static-neutral-bluish-1000: #e8e8ee;
+  color-scheme: dark;
+  background: var(--nis-bg-app);
+  /* 根级默认文字色：未显式配色的裸元素（icon svg/按钮默认色）从 inherit-black 变亮 */
+  color: var(--nis-text-1);
+}
+
+/* 骨架白底（App.vue inline 已去，靠类映射；这两条是主区变黑的根因修复，勿动结构） */
+html.dark .app-container { background: var(--nis-bg-app); }
+html.dark .app-main { background: var(--nis-bg-panel); }
+
+/* ── 高频背景类 ── */
+html.dark .bg-white { background-color: var(--nis-bg-panel); }
+html.dark .bg-gray-50, html.dark .bg-\[\#fafafa\] { background-color: var(--nis-bg-raised); }
+html.dark .bg-gray-100 { background-color: var(--nis-bg-hover); }
+html.dark .bg-gray-200, html.dark .bg-gray-300 { background-color: var(--nis-border); }
+html.dark .bg-\[\#15151a\] { background-color: #161616; }
+
+/* ── 高频文字类（.dark 权重天然压过 @theme 的 hover: 组，无需 !important；正文类例外见下）── */
+html.dark .text-gray-900, html.dark .text-gray-800 { color: var(--nis-text-1); }
+html.dark .text-gray-700, html.dark .text-gray-600 { color: var(--nis-text-2); }
+html.dark .text-gray-500, html.dark .text-gray-400 { color: var(--nis-text-3); }
+html.dark .text-gray-300 { color: var(--nis-text-4); }
+html.dark .text-gray-200, html.dark .text-gray-100 { color: var(--nis-text-2); }
+html.dark .text-\[\#15151a\] { color: var(--nis-text-1); }
+html.dark .text-\[\#4c4c4c\] { color: var(--nis-text-2); }
+html.dark .text-\[\#595967\], html.dark .text-\[\#5b5b66\] { color: var(--nis-text-3); }
+html.dark .text-\[\#6c6c78\] { color: var(--nis-text-3); }
+html.dark .border-gray-100, html.dark .border-gray-200 { border-color: var(--nis-border); }
+html.dark .border-gray-300 { border-color: var(--nis-border-strong); }
+/* 半透灰底（bg-gray-500/10 等）在深色下自动变浅光斑，语义不变，不映射 */
+
+/* ── 黑色实底元素反白（用户拍板：纯黑下黑按钮要可见=浅底黑字）──
+ * 组合选择器精确制导：只动"黑底+白/亮字"的按钮/胶囊，黑底彩字（状态徽标等）不碰。 */
+html.dark .btn-primary { background: #e9e9ef; color: #0a0a0a; }
+html.dark .btn-primary:hover { background: rgba(233, 233, 239, 0.82); }
+html.dark .btn-secondary { background: var(--nis-bg-hover); color: var(--nis-text-2); }
+html.dark .btn-secondary:hover { background: var(--nis-border); }
+/* 0911 修复：代码块曾被这条"反白"规则误伤——<pre class="bg-gray-900"> 在深色下被刷成 #e9e9ef（近白底），
+   而内部文字仍继承 text-gray-100（浅字）→ 白底浅字看不清（用户反馈截图实锤）。
+   语义区分：bg-gray-900 作为"选中态黑药丸/深色按钮"时该反白；作为**代码块底**时应保持深底浅字。
+   故对 pre / code 元素整体豁免反白（代码块是唯一同时用 bg-gray-900 又要求保持深色的场景）。 */
+html.dark .bg-black:not([class*="bg-black/"]):not(pre):not(code), html.dark .bg-gray-900:not([class*="bg-gray-900/"]):not(pre):not(code) { background-color: #e9e9ef; }
+/* 反白元素内部白字族→黑（同元素+后代；含 text-white/NN 带透明度白字统一半透黑）。同样豁免 pre/code */
+html.dark .bg-black:not([class*="bg-black/"]):not(pre):not(code) :is(.text-white, .text-gray-100),
+html.dark .bg-gray-900:not([class*="bg-gray-900/"]):not(pre):not(code) :is(.text-white, .text-gray-100),
+html.dark .bg-black:not([class*="bg-black/"]):not(pre):not(code)[class*="text-white"],
+html.dark .bg-gray-900:not([class*="bg-gray-900/"]):not(pre):not(code)[class*="text-white"] { color: #0a0a0a; }
+html.dark .bg-black:not([class*="bg-black/"]):not(pre):not(code) [class*="text-white/"],
+html.dark .bg-gray-900:not([class*="bg-gray-900/"]):not(pre):not(code) [class*="text-white/"] { color: rgba(10, 10, 10, 0.68); }
+/* 代码块边框在深色下同样不该是浅灰描边 */
+html.dark pre.bg-gray-900:not([class*="bg-gray-900/"]) { border-color: #30363d; }
+/* bg-gray-800 不反白：它是历史 dark: 变体的深色卡底色（#1d1d1d 语义），全局转浅会毁掉设置页所有卡底 */
+html.dark [class*="dark:bg-gray-800"] { background-color: #1d1d1d; }
+
+/* ── 聊天正文/过程块文字色（组件内写死亮色值，这里类级覆盖）── */
+html.dark .msg-body { color: var(--nis-text-1); }
+html.dark .dsh-markdown { color: var(--nis-text-1); }
+/* 代码块深色底亮字，dark 下底色加深一级即可（900 已在令牌覆盖） */
+
+/* ── 输入框磨砂壳：白底压深（empty 态更透档同调）── */
+html.dark .input-blur-layer { background: rgba(17, 17, 17, 0.62); }
+html.dark .empty-input .input-blur-layer { background: rgba(17, 17, 17, 0.4); }
+/* 0919：导入引导词胶囊同款深色档（材质对齐输入框，见 ChatInterface.vue 的 .import-chip） */
+html.dark .import-chip { background: rgba(17, 17, 17, 0.62); }
+html.dark .empty-layout .import-chip { background: rgba(17, 17, 17, 0.4); }
+
+/* ── 滚动条深色化 ── */
+html.dark ::-webkit-scrollbar-thumb { background: var(--nis-border-strong); }
+html.dark ::-webkit-scrollbar-thumb:hover { background: #3a3a3a; }
+
+/* ── 0908 对话过程块展开体统一细滚动条：只一根条、无轨道背景、无上下箭头 ──
+   覆盖 ToolPartBlock 全部滚动子容器 + ReasoningBlock 正文（类名即组件内实际滚动元素）。
+   Windows Chromium 默认滚动条带箭头+灰轨，观感重；此处压成 5px 圆条悬停加深，深浅两色通用 */
+.body-scroll, .io-section, .file-content, .code-body, .bash-out, .bash-err, .dispatch-task-text, .dispatch-accept, .dispatch-result, .reasoning-body, .chat-editor {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 120, 128, 0.4) transparent;
+}
+html.dark .body-scroll, html.dark .io-section, html.dark .file-content, html.dark .code-body, html.dark .bash-out, html.dark .bash-err, html.dark .dispatch-task-text, html.dark .dispatch-accept, html.dark .dispatch-result, html.dark .reasoning-body, html.dark .chat-editor {
+  scrollbar-color: rgba(220, 220, 228, 0.28) transparent;
+}
+.body-scroll::-webkit-scrollbar, .io-section::-webkit-scrollbar, .file-content::-webkit-scrollbar, .code-body::-webkit-scrollbar, .bash-out::-webkit-scrollbar, .bash-err::-webkit-scrollbar, .dispatch-task-text::-webkit-scrollbar, .dispatch-accept::-webkit-scrollbar, .dispatch-result::-webkit-scrollbar, .reasoning-body::-webkit-scrollbar, .chat-editor::-webkit-scrollbar { width: 5px; height: 5px; }
+.body-scroll::-webkit-scrollbar-track, .io-section::-webkit-scrollbar-track, .file-content::-webkit-scrollbar-track, .code-body::-webkit-scrollbar-track, .bash-out::-webkit-scrollbar-track, .bash-err::-webkit-scrollbar-track, .dispatch-task-text::-webkit-scrollbar-track, .dispatch-accept::-webkit-scrollbar-track, .dispatch-result::-webkit-scrollbar-track, .reasoning-body::-webkit-scrollbar-track, .chat-editor::-webkit-scrollbar-track { background: transparent; }
+.body-scroll::-webkit-scrollbar-button, .io-section::-webkit-scrollbar-button, .file-content::-webkit-scrollbar-button, .code-body::-webkit-scrollbar-button, .bash-out::-webkit-scrollbar-button, .bash-err::-webkit-scrollbar-button, .dispatch-task-text::-webkit-scrollbar-button, .dispatch-accept::-webkit-scrollbar-button, .dispatch-result::-webkit-scrollbar-button, .reasoning-body::-webkit-scrollbar-button, .chat-editor::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+.body-scroll::-webkit-scrollbar-thumb, .io-section::-webkit-scrollbar-thumb, .file-content::-webkit-scrollbar-thumb, .code-body::-webkit-scrollbar-thumb, .bash-out::-webkit-scrollbar-thumb, .bash-err::-webkit-scrollbar-thumb, .dispatch-task-text::-webkit-scrollbar-thumb, .dispatch-accept::-webkit-scrollbar-thumb, .dispatch-result::-webkit-scrollbar-thumb, .reasoning-body::-webkit-scrollbar-thumb, .chat-editor::-webkit-scrollbar-thumb { background: rgba(120, 120, 128, 0.4); border-radius: 4px; }
+.body-scroll::-webkit-scrollbar-thumb:hover, .io-section::-webkit-scrollbar-thumb:hover, .file-content::-webkit-scrollbar-thumb:hover, .code-body::-webkit-scrollbar-thumb:hover, .bash-out::-webkit-scrollbar-thumb:hover, .bash-err::-webkit-scrollbar-thumb:hover, .dispatch-task-text::-webkit-scrollbar-thumb:hover, .dispatch-accept::-webkit-scrollbar-thumb:hover, .dispatch-result::-webkit-scrollbar-thumb:hover, .reasoning-body::-webkit-scrollbar-thumb:hover, .chat-editor::-webkit-scrollbar-thumb:hover { background: rgba(120, 120, 128, 0.62); }
+html.dark .body-scroll::-webkit-scrollbar-thumb, html.dark .io-section::-webkit-scrollbar-thumb, html.dark .file-content::-webkit-scrollbar-thumb, html.dark .code-body::-webkit-scrollbar-thumb, html.dark .bash-out::-webkit-scrollbar-thumb, html.dark .bash-err::-webkit-scrollbar-thumb, html.dark .dispatch-task-text::-webkit-scrollbar-thumb, html.dark .dispatch-accept::-webkit-scrollbar-thumb, html.dark .dispatch-result::-webkit-scrollbar-thumb, html.dark .reasoning-body::-webkit-scrollbar-thumb, html.dark .chat-editor::-webkit-scrollbar-thumb { background: rgba(220, 220, 228, 0.28); }
+html.dark .body-scroll::-webkit-scrollbar-thumb:hover, html.dark .io-section::-webkit-scrollbar-thumb:hover, html.dark .file-content::-webkit-scrollbar-thumb:hover, html.dark .code-body::-webkit-scrollbar-thumb:hover, html.dark .bash-out::-webkit-scrollbar-thumb:hover, html.dark .bash-err::-webkit-scrollbar-thumb:hover, html.dark .dispatch-task-text::-webkit-scrollbar-thumb:hover, html.dark .dispatch-accept::-webkit-scrollbar-thumb:hover, html.dark .dispatch-result::-webkit-scrollbar-thumb:hover, html.dark .reasoning-body::-webkit-scrollbar-thumb:hover, html.dark .chat-editor::-webkit-scrollbar-thumb:hover { background: rgba(220, 220, 228, 0.45); }
+
+/* ── 弹窗遮罩加深（黑底上 50% 黑纱对比不足）── */
+html.dark [class*="bg-black/"] { background-color: rgba(0, 0, 0, 0.88); }
+
+/* ── 0906 组件 scoped 写死色的 dark 覆盖（_darkgen.mjs 生成+_人工审，57+2 条；
+   生成器保留在 backend/_darkgen.mjs，新组件写死色后可重跑增量补齐）── */
+html.dark .approval-card { background:#161616!important; background-color:#161616!important } /* ApprovalPanel.vue */
+html.dark .approval-headline { color:#e9e9ef!important } /* ApprovalPanel.vue */
+html.dark .btn-reject { color:#e9e9ef!important; background:#161616!important; background-color:#161616!important } /* ApprovalPanel.vue */
+html.dark .btn-allow { background:#e9e9ef!important; background-color:#e9e9ef!important; color:#0a0a0a!important } /* ApprovalPanel.vue */
+html.dark .dsh-markdown { color:#e9e9ef!important } /* MarkdownText.vue */
+html.dark .msg-body { color:#e9e9ef!important } /* PlainTextBlock.vue */
+html.dark .qc-card { color:#e9e9ef!important; background:#161616!important; background-color:#161616!important } /* QuestionComposer.vue */
+html.dark .qc-collapse-btn:hover { color:#e9e9ef!important; background:#1d1d1d!important; background-color:#1d1d1d!important } /* QuestionComposer.vue */
+html.dark .qc-title { color:#e9e9ef!important } /* QuestionComposer.vue */
+html.dark .qc-option:hover:not(:disabled) { background:#1d1d1d!important; background-color:#1d1d1d!important } /* QuestionComposer.vue */
+html.dark .qc-option-selected { background:#1d1d1d!important; background-color:#1d1d1d!important } /* QuestionComposer.vue */
+html.dark .qc-number { background:#1d1d1d!important; background-color:#1d1d1d!important } /* QuestionComposer.vue */
+html.dark .qc-number-picked { background:#e9e9ef!important; background-color:#e9e9ef!important; color:#0a0a0a!important } /* QuestionComposer.vue */
+html.dark .qc-custom-row:hover { background:#1d1d1d!important; background-color:#1d1d1d!important } /* QuestionComposer.vue */
+html.dark .qc-custom-row:focus-within { background:#1d1d1d!important; background-color:#1d1d1d!important } /* QuestionComposer.vue */
+html.dark .qc-active { background:#1d1d1d!important; background-color:#1d1d1d!important } /* QuestionComposer.vue */
+html.dark .qc-custom-row:focus-within { border-color:#262626!important } /* QuestionComposer.vue */
+html.dark .qc-active { border-color:#262626!important } /* QuestionComposer.vue */
+html.dark .qc-custom-input { color:#e9e9ef!important } /* QuestionComposer.vue */
+html.dark .qc-textarea { color:#e9e9ef!important; background:#1d1d1d!important; background-color:#1d1d1d!important } /* QuestionComposer.vue */
+html.dark .qc-page-btn:hover:not(:disabled) { color:#e9e9ef!important; background:#1d1d1d!important; background-color:#1d1d1d!important } /* QuestionComposer.vue */
+html.dark .qc-skip { background:#161616!important; background-color:#161616!important } /* QuestionComposer.vue */
+html.dark .qc-skip:hover:not(:disabled) { background:#1d1d1d!important; background-color:#1d1d1d!important } /* QuestionComposer.vue */
+html.dark .qc-submit { background:#e9e9ef!important; background-color:#e9e9ef!important; color:#0a0a0a!important } /* QuestionComposer.vue */
+html.dark .slider-popup { background:#161616!important; background-color:#161616!important } /* ReasoningModeBtn.vue */
+html.dark .rn-recovered { color:#e9e9ef!important } /* RetryNotice.vue */
+html.dark .seg { background:#1d1d1d!important; background-color:#1d1d1d!important } /* SegTabs.vue */
+html.dark .seg-item:hover { color:#e9e9ef!important } /* SegTabs.vue */
+html.dark .ctx-popover { background:#161616!important; background-color:#161616!important } /* StatsLine.vue */
+html.dark .model-entry-name { color:#e9e9ef!important } /* StatsLine.vue */
+html.dark .ctx-arrow { background:#161616!important; background-color:#161616!important } /* StatsLine.vue */
+html.dark .sub-agent-bubble { background:#161616!important; background-color:#161616!important } /* SubAgentBlock.vue */
+html.dark .dsh-session-title { color:#e9e9ef!important } /* ChatInterface.vue */
+html.dark .cn-card { background:#161616!important; background-color:#161616!important } /* PiChatView.vue */
+html.dark .cn-card-user { color:#e9e9ef!important } /* PiChatView.vue */
+html.dark .preview-tab:hover { color:#e9e9ef!important; background:#1d1d1d!important; background-color:#1d1d1d!important; border-color:#262626!important } /* PreviewTabBar.vue */
+html.dark .preview-tab-active { background:#e9e9ef!important; background-color:#e9e9ef!important; color:#0a0a0a!important } /* PreviewTabBar.vue */
+html.dark .preview-tab-active:hover { background:#e9e9ef!important; background-color:#e9e9ef!important; color:#0a0a0a!important } /* PreviewTabBar.vue */
+html.dark .preview-tab-close:hover { color:#e9e9ef!important } /* PreviewTabBar.vue */
+html.dark .preview-content { background:#161616!important; background-color:#161616!important } /* PreviewTabContent.vue */
+html.dark .preview-html-btn:hover { color:#e9e9ef!important } /* PreviewTabContent.vue */
+html.dark .preview-html-btn-active { background:#e9e9ef!important; background-color:#e9e9ef!important; color:#0a0a0a!important } /* PreviewTabContent.vue */
+html.dark .preview-code { color:#e9e9ef!important; background:#1d1d1d!important; background-color:#1d1d1d!important } /* PreviewTabContent.vue */
+html.dark .preview-frame { background:#161616!important; background-color:#161616!important } /* PreviewTabContent.vue */
+html.dark .preview-released { background:#1d1d1d!important; background-color:#1d1d1d!important } /* PreviewTabContent.vue */
+html.dark .preview-empty { background:#1d1d1d!important; background-color:#1d1d1d!important } /* PreviewTabContent.vue */
+html.dark .collapsed-conv-icon:hover { background:#1d1d1d!important; background-color:#1d1d1d!important } /* Sidebar.vue */
+html.dark .action-row { color:#e9e9ef!important } /* Sidebar.vue */
+html.dark .action-row:hover { background:#1d1d1d!important; background-color:#1d1d1d!important } /* Sidebar.vue */
+html.dark .conv-item { color:#e9e9ef!important } /* SidebarListItem.vue */
+html.dark .conv-item-idle:hover { background:#1d1d1d!important; background-color:#1d1d1d!important } /* SidebarListItem.vue */
+html.dark .conv-item-idle:hover .conv-icon { color:#e9e9ef!important } /* SidebarListItem.vue */
+html.dark .conv-item-idle:hover .conv-text { color:#e9e9ef!important } /* SidebarListItem.vue */
+html.dark .conv-item-selected { background:#e9e9ef!important; background-color:#e9e9ef!important; color:#0a0a0a!important } /* SidebarListItem.vue */
+html.dark .member-tab-btn:hover { color:#e9e9ef!important; background:#1d1d1d!important; background-color:#1d1d1d!important; border-color:#262626!important } /* TeamMemberPanel.vue */
+html.dark .member-tab-active { background:#e9e9ef!important; background-color:#e9e9ef!important; color:#0a0a0a!important } /* TeamMemberPanel.vue */
+html.dark .edit-form-footer { background:#161616!important; background-color:#161616!important } /* TeamMemberPanel.vue */
+/* SegTabs 黑胶囊滑块反白（thumb 单独深底，生成器按规则跳过，人工补） */
+html.dark .seg-thumb { background:#e9e9ef!important }
+html.dark .seg-item-active { color:#0a0a0a!important }
+
+/* 发送钮 dsh 局部变量组：深色下圆底反白+icon 变黑；停止态（红底）白字保持 */
+html.dark .send-btn { --neutral-1: #f0f0f5; --neutral-2: #c9c9d1; color: #0a0a0a; }
+html.dark .send-btn.is-sending { color: #ffffff; }
+
+.settings-sm-tabbar { display: none; } /* PC 默认隐藏；≤767 在下方 media 打开（源顺序必须在此 media 之前） */
+.sm-back, .prov-back { display: none; } /* PC 防线：返回键仅手机端显示（media 内覆盖） */
+/* ── 0906 手机端（≤767px，续 App.vue 侧）：弹窗全屏化 + 悬浮球/窗避让底部导航 ── */
+@media (max-width: 767px) {
+  /* 定宽弹窗家族（957/1040/1060 与旧 680/760 都覆盖）→ 全屏；属性选择器免转义类名
+     ★1012：+ `.settings-dock`（设置面板 w-[850px]）—— 原来它不在名单里 ⇒ 手机端没全屏化、
+     依赖同一祖先选择器的「内容区隐藏/返回键」也没生效。用专用标记类而不是改它的 w/h 工具类，
+     这样 PC 端（>767px）完全不受影响（本段整体锁在 max-width:767px 内）。 */
+  [class*="max-w-[94vw]"][class*="h-[82vh]"], [class*="w-[957px]"], [class*="w-[1040px]"], [class*="w-[1060px]"], [class*="w-[760px]"], [class*="w-[680px]"], .settings-dock {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    border-radius: 0 !important;
+    /* ★1012 修复：遮罩容器带 padding-top(≈68px) + align-items:flex-start —— 弹窗改成 100dvh 后
+       整块被顶下去，底部溢出屏幕（设置面板底部看不到）。fixed inset:0 直接贴满视口，摆脱父级内边距。 */
+    position: fixed !important;
+    inset: 0 !important;
+  }
+  /* ViewChatDock 悬浮窗/球：★1012 底部导航已撤 ⇒ 不再上抬 60px，只留 safe-area 与一点呼吸位 */
+  .fixed.bottom-5.right-5 {
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important;
+    right: 10px !important;
+  }
+  .dock-window { width: min(92vw, 360px) !important; }
+  /* 预览栏在小屏限宽可横滑（顶栏 tabs 挤压已有弹性收缩，兜底一行） */
+  .preview-tabbar { max-width: 100vw; }
+  /* 统计胶囊行窄屏允许横滑（不裁不挤） */
+  .stats-line { overflow-x: auto; scrollbar-width: none; }
+  /* 手机二批：右栏（日志/工作区）全屏化。⚠ 容器恒渲染——空容器必须隐藏（曾以白/黑底全屏盖住 main=整屏空白元凶），有面板(:has)才接管全屏 */
+  .right-docks { display: none !important; }
+  .right-docks:has(> * ) {
+    display: flex !important;
+    position: fixed !important;
+    left: 0; right: 0; top: calc(44px + env(safe-area-inset-top, 0px));
+    bottom: env(safe-area-inset-bottom, 0px);
+    width: 100vw !important; z-index: 65;
+    background: var(--nis-bg-panel, #fff);
+  }
+  .right-docks > * { width: 100vw !important; height: 100%; border: none !important; }
+  /* 顶栏固定视图（办公室/浏览器）隐藏=底部导航承担 */
+  .preview-tab.tab-office, .preview-tab.tab-browser { display: none; }
+  /* 设置弹窗：左导航隐藏（顶部横滑 tab 条由组件内 settings-sm-tabbar 承担） */
+  /* 列表页→子页切换式（用户定稿） */
+  .settings-nav.sm-hide { display: none !important; }
+  [class*="max-w-[94vw]"][class*="h-[82vh]"] > .flex > .flex-1.sm-sub,
+  .settings-dock > .flex > .flex-1.sm-sub { display: none !important; }
+  [class*="max-w-[94vw]"][class*="h-[82vh]"] .sm-back,
+  .settings-dock .sm-back { display: none; }
+  .settings-sm-tabbar ~ * .sm-back, [class*="max-w-[94vw]"][class*="h-[82vh]"] .sm-back, .settings-dock .sm-back { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 10px; padding: 6px 12px; border-radius: 9999px; background: rgba(0,0,0,0.05); font-size: 12px; color: #374151; border: none; cursor: pointer; }
+  html.dark [class*="max-w-[94vw]"][class*="h-[82vh]"] .sm-back, html.dark .settings-dock .sm-back { background: rgba(255,255,255,0.08); color: #c9c9d1; }
+  .settings-nav .seg-thumb { display: none; }
+  .settings-nav .seg-item-active { color: #111827; font-weight: 640; }
+  /* 0907：手机深色列表页 thumb 隐藏（上行）→ 选中项若无浅色文字会被"黑字无胶囊"隐身；
+     反白规则（html.dark .seg-item-active #0a0a00 系）特异性带 important 会压过来，这里同权回敬 */
+  html.dark .settings-nav .seg-item-active { color: #e9e9ef !important; font-weight: 640 !important; }
+  /* 供应商双栏→单列堆叠 */
+  .settings-body-providers [class*="w-[250px]"] { width: 100% !important; }
+  .settings-sm-tabbar { display: block; overflow-x: auto; scrollbar-width: none; padding: 0 10px 8px; }
+  .settings-sm-tabbar::-webkit-scrollbar { display: none; }
+  .settings-sm-tabbar .seg { flex-wrap: nowrap; }
+  .settings-sm-tabbar .seg-item { flex: 0 0 auto; }
+  /* ChatInput 390px 溢出兜底：工具行允许换行、各钮不再强制等宽 */
+  .input-shell [class*="flex items-center"] { flex-wrap: wrap; }
+  .stats-line::-webkit-scrollbar { display: none; }
+  /* 抽屉开合改兄弟选择器驱动（Sidebar 多根 fragment 时 :class 不落到根上） */
+  .app-container.is-mobile .mobile-scrim ~ .app-sidebar { transform: translateX(0); }
+}
+
+/* ═══ 0908：工具下拉弹层深色安全（QuickCommands 快捷命令 + SkillPicker 技能仓库）═══
+   根因：377 行 [class*="bg-gray-900"][class*="text-white"] 子串匹配把 `hover:bg-gray-900`
+   /`hover:text-white` 也命中，弹层内所有行被无条件压成深字 → 深色面板下"看不见"。
+   修=在 .tool-popover 作用域内还原两态：未选中=浅字深底；hover/选中=深字浅药丸。 */
+html.dark .tool-popover { background: #141418; border-color: #2a2a30; }
+html.dark .tool-popover .text-gray-400 { color: #8a8a92; }
+html.dark .tool-popover .cmd-item { color: #e6e6ea; }
+html.dark .tool-popover .cmd-item.text-gray-900 { color: #e6e6ea; }
+html.dark .tool-popover .cmd-item:hover { background: #e9e9ef !important; color: #0a0a0a !important; }
+html.dark .tool-popover .cmd-item:hover .text-gray-400 { color: #4b4b52; }
+html.dark .tool-popover .cmd-item.bg-gray-900 { background: #e9e9ef; color: #0a0a0a; }
+html.dark .tool-popover .cmd-item.bg-gray-900.text-white,
+html.dark .tool-popover .cmd-item.bg-gray-900 .text-white { color: #0a0a0a; }
+html.dark .tool-popover .cmd-item.bg-gray-900 .text-gray-300,
+html.dark .tool-popover .cmd-item.bg-gray-900 .text-gray-400 { color: #55555c; }
+
+/* ③ 选中行统一浅底黑字（图二工作区主文件夹选中/日志筛选激活）
+ * 0908 收尾（用户反馈 2）：子串匹配 [class*=] 会命中 `hover:bg-gray-900`/`hover:text-white`
+ * （ContextMenu 右键菜单行、预设/模式下拉行全中招）→ 深色下未悬停行被压成黑字看不见。
+ * 改 [class~=] 词元精确匹配：只命中真实同时挂 bg-gray-900+text-white 两个类词的选中态，
+ * hover:/group-hover: 变体与 bg-gray-900/80 半透明叠层不再误伤。 */
+html.dark [class~="bg-gray-900"][class~="text-white"] { color: #0a0a0a; }
+html.dark .log-tab-active { color: #0a0a0a !important; }
+html.dark .seg-item-active, html.dark .seg-item-active:hover { color: #0a0a0a !important; }
+html.dark .ws-row-selected, html.dark .tree-row-selected { color: #0a0a0a; }
+
+/* 右键菜单（ContextMenu .menu-item）深色两态——对齐 .tool-popover 语言：
+   未悬停浅字深底；悬停浅药丸深字；危险项悬停保留红底白字；禁用灰。 */
+html.dark .menu-item { color: #e6e6ea; }
+html.dark .menu-item:hover:not(:disabled) { background: #e9e9ef !important; color: #0a0a0a !important; }
+html.dark .menu-item[class*="hover:bg-red-600"]:hover { background: #dc2626 !important; color: #fff !important; }
+html.dark .menu-item:disabled { color: #55555c; }
+
+/* ═══ 0906 七批：磨砂玻璃 + tab 栏防挤出 + 深色收尾 ═══ */
+/* 玻璃变量（浅色白玻璃/深色墨玻璃；has-bg=设置了背景图时启用玻璃面板） */
+html { --glass-panel: rgba(255, 255, 255, 0.62); --glass-line: rgba(0, 0, 0, 0.07); }
+html.dark { --glass-panel: rgba(14, 14, 17, 0.6); --glass-line: rgba(255, 255, 255, 0.09); }
+.app-container.has-bg .app-sidebar,
+.app-container.has-bg .right-docks > * {
+  background: var(--glass-panel) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  backdrop-filter: blur(18px) saturate(1.5);
+  border-color: var(--glass-line) !important;
+}
+/* 深色下浅黄语义底统一淡色（图二工作区主文件夹/文件变更行） */
+html.dark [class*="bg-amber-50"], html.dark [class*="bg-amber-100"],
+html.dark [class*="bg-yellow-50"], html.dark [class*="bg-yellow-100"] {
+  background-color: rgba(245, 158, 11, 0.13);
+}
+/* 手机端抽屉：圆角与玻璃同步（媒体查询内联优先级已核） */
+@media (max-width: 767px) {
+  .app-container.has-bg.is-mobile .app-sidebar {
+    background: var(--glass-panel);
+    -webkit-backdrop-filter: blur(20px) saturate(1.5);
+    backdrop-filter: blur(20px) saturate(1.5);
+  }
+}
+
+/* 0906 七批续：深色下统计胶囊改墨底（白半透在黑上突兀）；发送钮不反白改深灰渐变+浅icon */
+html.dark .stats-pill { background: rgba(44, 44, 50, 0.88); border-color: rgba(255, 255, 255, 0.16); color: #b8b8c0; }
+html.dark .stats-pill:hover { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5); }
+html.dark .send-btn { --neutral-1: #26262e; --neutral-2: #141419; color: #d9d9e3; }
+html.dark .send-btn:hover { color: #ffffff; }
+
+/* 0906 七批续2：深色选中会话行文字（scoped 白副标题/浅主标题在反白底上看不清） */
+html.dark .conv-item-selected, html.dark .conv-item-selected :is(.conv-text, .conv-icon) { color: #0a0a0a !important; }
+html.dark .conv-item-selected .conv-subtitle { color: rgba(10, 10, 10, 0.62) !important; }
+
+/* 0906 七批续3：浅彩语义底（标签/选中态）深色映射——bg-blue-50 选中模型行等，浅彩底+浅字=看不清根因 */
+html.dark [class*="bg-blue-5"], html.dark [class*="bg-blue-1"] { background-color: rgba(59, 130, 246, 0.18); }
+html.dark [class*="bg-emerald-5"], html.dark [class*="bg-emerald-1"] { background-color: rgba(16, 185, 129, 0.16); }
+html.dark [class*="bg-purple-5"], html.dark [class*="bg-purple-1"] { background-color: rgba(168, 85, 247, 0.16); }
+html.dark [class*="bg-cyan-5"], html.dark [class*="bg-cyan-1"] { background-color: rgba(6, 182, 212, 0.16); }
+html.dark [class*="bg-indigo-5"], html.dark [class*="bg-indigo-1"] { background-color: rgba(99, 102, 241, 0.18); }
+html.dark [class*="bg-red-5"], html.dark [class*="bg-red-1"] { background-color: rgba(239, 68, 68, 0.15); }
+html.dark [class*="bg-rose-5"], html.dark [class*="bg-rose-1"] { background-color: rgba(244, 63, 94, 0.15); }
+html.dark [class*="bg-orange-5"], html.dark [class*="bg-orange-1"] { background-color: rgba(249, 115, 22, 0.15); }
+/* 彩底标签边框同步压暗 */
+html.dark [class*="border-blue-1"], html.dark [class*="border-emerald-1"], html.dark [class*="border-purple-1"],
+html.dark [class*="border-cyan-1"], html.dark [class*="border-indigo-1"] { border-color: rgba(255, 255, 255, 0.12); }
+
+/* 图一修复 v2（0907 用户纠偏）：要去的是 settings-nav 整块 .seg 轨道灰底——
+   十一批生成器的 html.dark .seg{#1d1d1d!important} 压过了 SegTabs plain 变体自带的
+   background:transparent（特异性+important 双杀），垂直长条上就变成一块大灰色胶囊卡片。
+   选中项的黑/白胶囊 thumb 与文字选中态保留不动。 */
+html.dark .settings-nav .seg { background: transparent !important; }
+html.dark .action-row:hover { background: rgba(255, 255, 255, 0.1) !important; }
+html.dark .sidebar-gear { color: #c9c9d1; }
+html.dark .sidebar-gear:hover { background: rgba(255, 255, 255, 0.12); color: #ffffff; }
+/* 图二修复（0907）：hover 类被 dark 底色规则误命中=悬停样式"卡死"根因——
+   `html.dark .bg-gray-100` / `[class*="bg-gray-100"]` 等子串选择器把 "hover:bg-gray-100" 也算进去，
+   常态（未悬停）即有灰底。修法①所有带 hover:bg-gray-* 的按钮常态透明，②选中态子串选择器改为
+   空格起始 token（只匹配真实 "bg-gray-100"，不再匹配 "hover:bg-gray-100"）。 */
+html.dark .app-sidebar button[class*=" hover:bg-gray-1"],
+html.dark .app-sidebar button[class*=" hover:bg-gray-2"],
+html.dark button[class*=" hover:bg-gray-1"],
+html.dark button[class*=" hover:bg-gray-2"],
+html.dark button[class*=" hover:bg-gray-3"] { background-color: transparent; }
+/* 保护"真实灰底+hover 更深灰"的组合按钮（如 bg-gray-100 hover:bg-gray-200）：
+   带真实 bg-gray-N token 的不吃上面的透明规则，仍由映射层给深灰底 */
+html.dark button[class*=" hover:bg-gray-1"][class*=" bg-gray-1"],
+html.dark button[class*=" hover:bg-gray-2"][class*=" bg-gray-1"],
+html.dark button[class*=" hover:bg-gray-2"][class*=" bg-gray-2"],
+html.dark button[class*=" hover:bg-gray-3"][class*=" bg-gray-1"],
+html.dark button[class*=" hover:bg-gray-3"][class*=" bg-gray-2"],
+html.dark button[class*=" hover:bg-gray-3"][class*=" bg-gray-3"] { background-color: var(--nis-bg-hover) !important; }
+html.dark button[class*=" hover:bg-gray-1"]:hover,
+html.dark button[class*=" hover:bg-gray-2"]:hover,
+html.dark button[class*=" hover:bg-gray-3"]:hover { background-color: rgba(255, 255, 255, 0.1) !important; }
+/* 0909 ②（网页搜索弹窗悬停白底白字实锤）：hover:bg-gray-50/100 在深色下仍编译成浅灰底
+   （#f9fafb），叠上文字映射层的浅色字=悬停行"文字看不见"。上面 482 行只兜了 button 的
+   gray-1/2/3 前缀，gray-50/100 的 button 与 div 行（引擎列表/模型列表/MCP工具清单）都没管。
+   统一：深色下凡 hover:bg-gray-50/100 的行悬停给半透明白（与既有 hover 药丸同值），文字保持浅色。
+   ⚠ 选择器用"词元精确 + 透明度变体前缀"（class~= 与 ^=），不用裸 [class*=]：
+   子串会连 hover:bg-gray-500 这类不存在但将来可能出现的变体一起误伤（0908 [class~=] 教训）。 */
+html.dark [class~="hover:bg-gray-50"]:hover,
+html.dark [class~="hover:bg-gray-100"]:hover,
+html.dark [class^="hover:bg-gray-50/"]:hover,
+html.dark [class*=" hover:bg-gray-50/"]:hover,
+html.dark [class^="hover:bg-gray-100/"]:hover,
+html.dark [class*=" hover:bg-gray-100/"]:hover { background-color: rgba(255, 255, 255, 0.1) !important; }
+/* 0909⑤：计划胶囊深色底；0909⑦改：材质对齐输入框磨砂（深色版 .input-blur-layer=rgba(17,17,17,0.62)+blur），
+   浅色版在 PlanCard.vue scoped 里；这里覆盖 background/边框/内高光 */
+html.dark .plan-pill { background: linear-gradient(160deg, rgba(24, 24, 26, 0.72) 0%, rgba(17, 17, 19, 0.6) 100%); border-color: rgba(255, 255, 255, 0.12); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08); }
+html.dark .plan-pill:hover { background: linear-gradient(160deg, rgba(32, 32, 34, 0.8) 0%, rgba(22, 22, 24, 0.68) 100%); }
+html.dark .plan-pill.open { background: linear-gradient(160deg, rgba(34, 34, 36, 0.82) 0%, rgba(24, 24, 26, 0.7) 100%); }
+html.dark .plan-pill-pop { background: linear-gradient(160deg, rgba(24, 24, 26, 0.78) 0%, rgba(17, 17, 19, 0.66) 100%); border-color: rgba(255, 255, 255, 0.12); box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.07); }
+/* 侧栏按钮选中态（activeIndex 加的真实 bg-gray-100 类）：token 前导空格匹配，hover: 变体不再命中 */
+html.dark .app-sidebar button[class*=" bg-gray-100"] { background-color: var(--nis-border-strong) !important; }
+html.dark .app-sidebar button[class*=" bg-gray-100"] span { color: #e9e9ef !important; }
+html.dark .app-sidebar .action-row:hover { background: rgba(255, 255, 255, 0.13) !important; }
+
+/* ═══ 0910 反馈5/7/8：带透明度后缀的灰底漏网族 ═══
+   映射层 211-214 是"词元精确"类选择器（.bg-gray-50 等），Tailwind 的 bg-gray-50/70 这类
+   带 /NN 透明度后缀的 token 完全不吃映射 → 深色下仍是近白底 + 映射后的浅灰字 = "文字和背景
+   颜色接近"（文件变更区头、黑板进度卡、成员面板头部、文件树根行实锤）。
+   规则：半透明灰底在深色下一律映射为"提亮一档的透明白"，字号色走既有文字映射。 */
+html.dark [class~="bg-gray-50/60"], html.dark [class~="bg-gray-50/70"], html.dark [class~="bg-gray-50/80"],
+html.dark [class~="bg-gray-50/85"], html.dark [class~="bg-gray-50/90"] { background-color: rgba(255, 255, 255, 0.05) !important; }
+html.dark [class~="bg-gray-100/60"], html.dark [class~="bg-gray-100/70"], html.dark [class~="bg-gray-100/80"],
+html.dark [class~="bg-gray-100/85"], html.dark [class~="bg-gray-100/90"] { background-color: rgba(255, 255, 255, 0.08) !important; }
+html.dark [class~="bg-gray-200/60"], html.dark [class~="bg-gray-200/70"], html.dark [class~="bg-gray-200/80"] { background-color: rgba(255, 255, 255, 0.12) !important; }
+/* 白色半透底（bg-white/xx 卡片在深色下同样是白底漏网） */
+html.dark [class~="bg-white/60"], html.dark [class~="bg-white/70"], html.dark [class~="bg-white/80"] { background-color: rgba(255, 255, 255, 0.07) !important; }
+/* 深色下"浅底浅字"的对比度下限：文件变更区行文字（gray-600/500 在深底上偏暗）抬一档 */
+html.dark .ws-change-row, html.dark .ws-change-row .ws-change-name { color: var(--nis-text-2); }
+
+/* ═══ 0910 反馈9：工具块深色配色修复 ═══
+   根因：命令卡（.bash-cmd/.bash-out）与 markdown 代码围栏（.dsh-md-pre/.dsh-md-fence-head）用的是
+   --dsw-static-neutral-bluish-850（底）+ -100（字）这对"深底浅字"令牌，深色段把整套静态色阶
+   无差别翻黑（850→#131316、100→#1d1d20）→ 深底深字，命令内容几乎不可见。
+   修：深色下这些代码/终端面显式给"深底 + 浅字"（不再依赖被翻转的令牌）。 */
+html.dark .bash-cmd { background: #16161a !important; color: #e6e6ec !important; border-color: rgba(255, 255, 255, 0.1) !important; }
+html.dark .bash-prompt { color: #8fb4ff !important; }
+html.dark .bash-out { color: #b7e8bd !important; }
+html.dark .bash-err { color: #ffb4b4 !important; }
+html.dark .dsh-md-pre, html.dark .dsh-md-fence-head, html.dark .dsh-md-code { background: #16161a !important; color: #e6e6ec !important; border-color: rgba(255, 255, 255, 0.1) !important; }
+html.dark .code-body, html.dark .file-content { color: #e6e6ec; }
+html.dark .io-text, html.dark .io-label { color: var(--nis-text-2); }
+
+/* ═══ 0910 反馈7：预览标签页关闭按钮（深色下看不见）═══
+   基态 color:#9ca3af + opacity .5 在纯黑底上几乎隐形；激活 tab 在深色段被反白成浅胶囊，
+   而 scoped 的关闭图标仍是 rgba(255,255,255,.6)=白字压浅底。两态都要显式给色。 */
+html.dark .preview-tab-close { color: #9a9aa4 !important; opacity: 0.85 !important; }
+html.dark .preview-tab-close:hover { color: #0a0a0a !important; background: rgba(255, 255, 255, 0.55) !important; opacity: 1 !important; }
+html.dark .preview-tab-active .preview-tab-close { color: rgba(10, 10, 10, 0.55) !important; opacity: 1 !important; }
+html.dark .preview-tab-active .preview-tab-close:hover { color: #0a0a0a !important; background: rgba(0, 0, 0, 0.12) !important; }
+
+/* ═══ 0906 十一批：手机端专项（不影响 PC）═══ */
+@media (max-width: 767px) {
+  /* 3. 模型触发按钮只显供应商头像（模型名隐藏；弹层内仍可选模型） */
+  .ms-trigger-name { display: none; }
+  /* 3. 推理强度弹层（ReasoningModeBtn slider-popup）手机端固定屏内，不再跟按钮弹出屏外 */
+  .slider-popup {
+    position: fixed !important;
+    left: 10px !important; right: 10px !important;
+    bottom: calc(140px + env(safe-area-inset-bottom, 0px)) !important;
+    top: auto !important;
+    width: auto !important;
+  }
+  /* 4. 供应商列表页铺满（去掉 172/250 半边） */
+  .settings-nav { width: 100% !important; border-right: none !important; }
+  /* 4. 列表/子页两段切换通用类（smEntered=内容区、provListMode=供应商列表/详情） */
+  .sm-hide { display: none !important; }
+  .sm-sub { display: none !important; }
+  .sm-back { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 10px; padding: 6px 12px; border-radius: 9999px; background: rgba(0,0,0,0.05); font-size: 12px; color: #374151; border: none; cursor: pointer; }
+  html.dark .sm-back { background: rgba(255,255,255,0.08); color: #c9c9d1; }
+  /* 7. AI 组=头像独行、内容下一行与头像左对齐（图八）
+     ⚠ 0907 实锤：模板的 items-start 在 column 方向下管的是"宽度=内容驱动"，
+     Think 正文/长行会把内容列撑到 1000px+ 超屏（min-w-0 救不了交叉轴 start）——
+     column 化必须同改 align-items:stretch，头像单独 align-self:flex-start 防拉伸 */
+  .ai-group-row { flex-direction: column !important; gap: 6px !important; align-items: stretch !important; }
+  .ai-group-row > .relative.flex-shrink-0 { margin-left: 2px; align-self: flex-start; }
+  /* 3(图四). 底部统计胶囊不再被底部导航裁切（0907：Teleport 进导航的 compact 行不再需要此 margin）
+     ★1012：底部导航（1011 极简版）已整体撤掉，这 54px 预留成了输入框上方一条死空白 ⇒ 归零 */
+  .stats-line:not(.stats-teleported) { margin-bottom: 0; }
+
+  /* ═══ ★1012 手机端第三批（用户真机反馈）═══ */
+  /* ① 视口高度：iOS Safari 的 100vh 把浏览器底栏也算进去 ⇒ 贴底那一排按钮
+        （[⌘][语音][发送]）被底栏盖住＝「对话界面下面的按钮全都不显示」。改 dvh 跟随可视视口。 */
+  .app-container { height: 100dvh !important; }
+  /* ② 空态地球：<Globe :size="900"> 是 900px 固定画布 ⇒ 393px 屏上横向溢出、只剩半张弧线
+        「根本看不出是个什么东西」。手机端按视口宽等比缩（canvas 内部分辨率不变，不糊）。 */
+  .empty-globe canvas { width: 96vw !important; height: 96vw !important; }
+  /* ③ 会话头整行手机端隐藏：标题/模式已由顶栏承担，进程监控+通知已挪进顶栏
+        ⇒ 消灭「标题两层 + 多余按钮」（反馈 3/4）。 */
+  .app-container.is-mobile .dsh-session-header { display: none !important; }
+}
+
+/* ═══ 0907 手机/深色批（图四~图七）：全部锁 ≤767 或 html.dark，PC 端零影响 ═══ */
+@media (max-width: 767px) {
+  /* 图五：底部状态胶囊行手机只留"要用的那几颗"（计时/耗时/token/模型数等仍收，PC 不变）。
+     ★1012z：三胶囊方案后，**轮播胶囊(.stats-pill-roll) 与 输入缓存胶囊(.stats-pill-usage) 必须放行**
+     —— 它们同样带 .stats-pill，原来被这条一刀隐藏（用户真机：「输入框底部只剩上下文了」）。 */
+  .stats-line .stats-pill:not(.stats-pill-ctx):not(.stats-pill-roll):not(.stats-pill-usage) { display: none !important; }
+  .stats-line { flex-wrap: nowrap; }
+  /* 图六：权限/模式弹窗（PermissionSelector/PlanModeSelector）原为按钮上方 absolute 小胶囊，
+     手机屏窄+被输入区滚动容器裁切=形态异常；改固定横条浮在输入区上方居中 */
+  .mode-popover {
+    position: fixed !important;
+    left: 10px !important;
+    right: 10px !important;
+    top: auto !important;
+    bottom: calc(210px + env(safe-area-inset-bottom, 0px)) !important;
+    margin-bottom: 0 !important;
+    width: auto !important;
+    justify-content: center;
+  }
+  /* 图七：推理强度卡（ModelSelector effort-card）原从厂商列右侧 absolute 弹出，手机必出屏；
+     固定屏内横卡置于模型选择器弹层上方（z 更高，用户所说"始终在模型选择器上方出现"） */
+  .effort-card {
+    position: fixed !important;
+    left: 10px !important;
+    right: 10px !important;
+    top: auto !important;
+    bottom: calc(210px + env(safe-area-inset-bottom, 0px)) !important;
+    width: auto !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    z-index: 10000;
+  }
+  /* ★1012j：**已按需求要求退回** —— 原先我把输入区下拉弹层（快捷命令/技能/@成员）改成 fixed 屏内，
+     但它连带影响了弹层结构观感（反馈"几个按钮的弹窗结构乱七八糟"）。
+     现恢复组件原始行为（`absolute bottom-full left-0`，靠输入区自身容器），不再强改。 */
+  /* ★1012：计划卡 / 后台任务胶囊的展开浮层（PlanCard.plan-pill-pop 右锚点、BgTaskPill.bgt-pop 左锚点）
+     都是 **固定 width:360px** 绝对定位 ⇒ 窄屏下从锚点铺 360px 右溢，被祖先 overflow:hidden 裁掉
+     （反馈「计划和后台任务胶囊显示也不完整会被裁断」）。手机端统一屏内贴边、宽度自适应，
+     仍保留「从胶囊下方弹出」的语义（不改 top/absolute）。 */
+  /* ★1012x：计划卡 / 后台任务胶囊的展开浮层 —— 用户真机反馈「点击出来的弹窗太窄，啥也看不见」。
+     根因：之前写的 `left:10px; right:10px` 是相对**胶囊自身（很窄的定位祖先）**算的
+     ⇒ 宽度只有"胶囊宽 - 20px"，字全挤没了。
+     改成 **fixed 屏内定宽**（不看父容器），位置贴在对话区顶部（手机端 = 顶栏 44 + 预览 tab 栏 47 ≈ 94）。 */
+  .plan-pill-pop, .bgt-pop {
+    position: fixed !important;
+    left: 10px !important;
+    right: 10px !important;
+    top: calc(94px + env(safe-area-inset-top, 0px)) !important;
+    bottom: auto !important;
+    width: auto !important;
+    max-height: 56vh !important;
+    z-index: 10010 !important;
+    overflow-y: auto !important;
+  }
+  /* ★1012ad：**二级弹窗出现时隐藏一级**（需求）—— 点任务项打开「任务详情」(.bgtm-mask) 时，
+     下面那层「任务列表」(.bgt-pop) 不该继续露着（两层叠着看不清）。
+     用 :has() 纯 CSS 实现，无需改组件；关掉详情后一层自动恢复。 */
+  body:has(.bgtm-mask) .bgt-pop { display: none !important; }
+  /* ★1012k：输入行 —— 要求「所有按钮一行 + 模型选择器与语音/发送间距缩小」。
+     实测现状：4 图标与「⌘/🎤/➤」已在一行，但父容器自带 **`justify-between`** 把两组推向两端
+     ⇒ 中间留 64px 空隙（用户看的"间距大"就是这个）。
+     精准处置：**只改对齐方式**（flex-start）并把组间水平间距收到 6px；
+     不碰任何尺寸/子元素 margin/gap（上几轮的教训：硬压既有布局会引出新问题）。 */
+  .app-container.is-mobile .input-shell > .flex.flex-wrap.items-center {
+    justify-content: flex-start !important;
+    column-gap: 6px !important;
+  }
+  /* ★1012l：用户真机仍"⌘ 掉到第二行、右边空着"—— 32px 图标在真机上刚好超一点点被 wrap。
+     只把图标按钮收到 **28px**（图标 15px），**不动任何 gap/margin/对齐**（上几轮"间距乱/闪烁"就是
+     同时改这些引起的）。28px 下整行 ≈240px，真机 315px 可用宽度绰绰有余 ⇒ 必定一行。 */
+  .app-container.is-mobile .input-shell > .flex.flex-wrap.items-center button:not(:has(.ms-trigger-name)) {
+    width: 28px !important;
+    min-width: 28px !important;
+    height: 28px !important;
+    padding: 0 !important;
+  }
+  /* ★1012z/1012aa：右侧「语音 / 发送」
+     · 反馈①：发送按钮右侧留白过大 ⇒ 右侧组 `margin-left: auto` 靠右（总宽已够，不会再顶出框）
+     · 反馈②：原本设计**发送键比语音键大** ⇒ 语音 34px、发送 40px（类名 .send-btn） */
+  .app-container.is-mobile .input-shell > .flex.flex-wrap.items-center > div:last-child {
+    margin-left: auto !important;
+  }
+  .app-container.is-mobile .input-shell > .flex.flex-wrap.items-center > div:last-child button {
+    width: 34px !important;
+    min-width: 34px !important;
+    height: 34px !important;
+    padding: 0 !important;
+    border-radius: 9999px !important;
+  }
+  .app-container.is-mobile .input-shell > .flex.flex-wrap.items-center > div:last-child .send-btn {
+    width: 40px !important;
+    min-width: 40px !important;
+    height: 40px !important;
+  }
+  /* ★1012ab：用户真机 —— 空态下 ⌘ 被挤到第二排、且 ⌘ 与语音之间留白过大（实测 40px）。
+     该行是 `div.flex.items-center.space-x-3.input-meta-row`（⌘ + `<span class="w-4">` 垫片 + 🎤 + ➤）：
+       · `space-x-3` = 子元素 margin-left 12px（两头共 24px）
+       · 中间还插了个 16px 宽的 spacer
+     ⇒ 手机端：**去掉 spacer + 清掉 space-x 的 margin + 统一 4px 间距**（省约 32px，帮整行一行放得下）。 */
+  .app-container.is-mobile .input-shell .input-meta-row > .w-4 { display: none !important; }
+  .app-container.is-mobile .input-shell .input-meta-row > * { margin-left: 0 !important; }
+  .app-container.is-mobile .input-shell .input-meta-row > * + * { margin-left: 4px !important; }
+  .app-container.is-mobile .input-shell .input-meta-row { column-gap: 4px !important; }
+  .app-container.is-mobile .input-shell > .flex.flex-wrap.items-center button:not(:has(.ms-trigger-name)) i,
+  .app-container.is-mobile .input-shell > .flex.flex-wrap.items-center button:not(:has(.ms-trigger-name)) svg {
+    width: 15px !important;
+    height: 15px !important;
+    font-size: 15px !important;
+  }
+  /* ★1012z：右侧组图标也恢复原尺寸（同上一段的理由，勿被 15px 波及） */
+  .app-container.is-mobile .input-shell > .flex.flex-wrap.items-center > div:last-child button i,
+  .app-container.is-mobile .input-shell > .flex.flex-wrap.items-center > div:last-child button svg {
+    width: 18px !important;
+    height: 18px !important;
+    font-size: 18px !important;
+  }
+  /* ★1012p：手机端设置「供应商」页卡片 —— 真机现象「供应商名称看不到」的**实测根因**：
+     卡片行 `flex items-center gap-3` 里要塞 状态点8 + logo32 + 名称块 + 「N个模型」39 + 开关36 + 箭头28
+     + gap 12×5；293px 宽的卡片里名称块只剩 58px，再被「已停用」徽标(39px)挤掉 ⇒ 名称 truncate 到 11px。
+     处置：卡片行允许换行 + 名称块独占第二行（order:3）+ 间距收窄（不动任何尺寸/其它间距）。 */
+  .settings-dock .settings-body-providers [class*="flex items-center gap-3"] {
+    flex-wrap: wrap;
+    row-gap: 6px;
+    column-gap: 8px;
+    /* ★1012s：卡片变宽后第一行元素挤在左边、右侧空一截（用户真机图）⇒ 两端对齐铺开 */
+    justify-content: space-between !important;
+  }
+  .settings-dock .settings-body-providers [class*="flex items-center gap-3"] > .flex-1 {
+    flex: 1 1 100% !important;
+    min-width: 0 !important;
+    order: 3;
+  }
+  /* ── ★1012q：手机端设置面板（用户真机四问题）──
+     注意：设置弹窗是 Teleport 到 body 的，**不在 .app-container 内** ⇒ 前缀一律用弹窗自带的 .settings-dock。 */
+  /* ① 返回按钮常驻：sticky 吸在内容区顶部（原来 position:static，下滑就滚走 = 需求"用起来不舒服"） */
+  .settings-dock .sm-back {
+    position: sticky;
+    top: 0;
+    z-index: 6;
+    background: var(--nis-bg-panel, #ffffff);
+  }
+  html.dark .settings-dock .sm-back { background: #0f0f12; }
+  /* ② 供应商页两层滚动嵌套 → 只留外层：内层列表容器高度自适应、不再自己滚
+        （实测该页列表是 `h-full overflow-y-auto`，与 .sm-sub 形成两层滚动条） */
+  .settings-dock .settings-body-providers > * {
+    height: auto !important;
+    max-height: none !important;
+    overflow-y: visible !important;
+  }
+  /* ③ 「文字竖写（一字一行）」根治：设置面板内所有 flex 行允许换行，且文字块给最小宽度兜底
+        —— 实测人格页：`flex items-center gap-4` 行里文字块 `.flex-1` 被右侧按钮挤到 **35px**
+        ⇒ "头像 · 不设置时使用 NIS 的默认 logo 头像" 只能一字一行。
+        ⚠️ 前缀**不能用 `.sm-sub`**：手机端进入子页后组件会把这个类摘掉（它靠该类控制导航/内容切换）
+        ⇒ 之前挂在 `.sm-sub` 下的规则全部失效（实测踩过）。用 `.settings-dock` 前缀。 */
+  .settings-dock [class*="flex items-center"] { flex-wrap: wrap !important; }
+  .settings-dock [class*="flex items-center"] > .flex-1 {
+    flex: 1 1 8em !important;
+    min-width: 8em !important;
+  }
+  /* ④ 双列网格 → 单列（实测版本保底页仍是 `grid grid-cols-2`：165.5px×2 ⇒ 标签换行挤成一团） */
+  .settings-dock [class*="grid-cols-2"] { grid-template-columns: 1fr !important; }
+
+  /* ── ★1012r：用户真机 3 图（留白 / 详情竖排+遮挡 / 强度选择器出格）── */
+  /* ① 两侧留白太多：设置内容区 `p-6`(24px) + 供应商列表容器 `px-6`(24px) 叠加 ⇒ 屏 393 里
+        卡片只有 295px（左右各留 ~49px）。手机端两层各收一半，卡片吃满。 */
+  .settings-dock > .flex > .flex-1 { padding: 12px !important; }
+  .settings-dock .settings-body-providers [class*="px-6"] {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+  /* ② 设置内「label 左 + 控件右」的表单行（实测 `flex items-center justify-between gap-3`，nowrap）
+        —— label 块被控件挤到 **53px** ⇒ "接口协议 / 网络代理 / Base URL" 一字一行，
+        控件还会盖住文字。手机端改**纵向堆叠**：label 整行、控件整行在下。
+        同时覆盖供应商详情弹窗与人格页「全局模型」行（两者同结构）。 */
+  .settings-dock [class*="flex items-center justify-between gap-3"],
+  [class*="w-[640px]"] [class*="flex items-center justify-between gap-3"] {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 6px !important;
+  }
+  .settings-dock [class*="flex items-center justify-between gap-3"] > .flex-1,
+  [class*="w-[640px]"] [class*="flex items-center justify-between gap-3"] > .flex-1 {
+    flex: 0 0 auto !important;
+    min-width: 0 !important;
+  }
+  /* ③ 供应商详情弹窗（「模型 · N」那一块）窄屏重排：实测模型名被挤成 `d...`、文本/图像/推理标签竖排
+        ⇒ 该弹窗内一律允许换行 + 文字块给最小宽度 + 放开 truncate（放不下就换行显示全，不截成一个字）。 */
+  [class*="w-[640px]"] [class*="flex"] { flex-wrap: wrap !important; }
+  [class*="w-[640px]"] [class*="flex"] > .flex-1,
+  [class*="w-[640px]"] [class*="flex"] > .min-w-0 { min-width: 10em !important; }
+  [class*="w-[640px]"] .truncate {
+    overflow: visible !important;
+    text-overflow: clip !important;
+    white-space: normal !important;
+  }
+  /* 手机端隐藏「上传附件」按钮（用户定：少一颗按钮，一行放得下）—— 按钮带标记类 ci-attach-btn */
+  .app-container.is-mobile .ci-attach-btn { display: none !important; }
+  /* 统计胶囊行（★1012 手机端改回原位渲染）：窄屏别撑高，允许横滑 */
+  .input-dock .stats-line {
+    margin-top: 2px;
+    padding: 0 16px;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+  }
+  .input-dock .stats-line::-webkit-scrollbar { display: none; }
+  /* ★1012k：手机端模型选择器改用**组件内的居中 sheet**（`ModelSelector.vue` 的 `.ms-sheet`：
+     供应商列表居中 → 点供应商 → 模型列表居中（左上返回）+ 模型/推理强度切换 + 点空白或 × 关闭）。
+     桌面那套 Dock / 模型列表浮层在手机端整体隐藏，避免两套并存互相打架。
+     这里**不再对浮层做任何覆盖样式**（前几轮覆盖式修法的教训：压住一处引出三处新问题）。 */
+  .app-container.is-mobile .ms-pop,
+  .app-container.is-mobile .ms-model-list { display: none !important; }
+  /* ★1012e（用户纠正）：**不要**在手机端显示模型名 —— 名称占宽会把工具按钮挤乱。
+     恢复 0906 口径：手机端只显厂商图标。 */
+  .ms-trigger-name { display: none !important; }
+  /* 统计胶囊行（compact）左对齐输入框（需求要求：「上下文圆环向左对齐输入框」） */
+  .stats-line-compact {
+    justify-content: flex-start !important;
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+    gap: 8px;
+  }
+  .effort-card > div { width: 100% !important; box-sizing: border-box; }
+  .effort-card .card-shadow { width: 100% !important; } /* EffortSlider 内联 width:210px 被 important 拉满 */
+  /* 图四补充：running 态 Think 摘要原 text-overflow:clip=直接截图像"超屏"，手机改省略号 */
+  .reasoning-row[data-state='running'] .reasoning-summary { text-overflow: ellipsis !important; }
+  /* 新一图（0907）：过程块展开体（IN/OUT、bash、file 内容、代码）手机强制换行，
+     杜绝横向超屏；展开链统一 min-width:0/max-width:100% 兜底 */
+  .tool-body-wrap pre, .io-text { white-space: pre-wrap !important; overflow-wrap: anywhere; word-break: break-word; }
+  .tool-body-wrap, .io-card, .io-section, .bash-card, .file-card, .body-scroll { min-width: 0; max-width: 100%; }
+  /* 摘要行文件 chip 收窄（PC 80px；手机行窄，"文本+chip" 合计常超行宽——chip 里的 inline-flex
+     盒不参与 text-overflow 省略，超出即被行裁半）。48px 时 chip≈70px 可容纳 */
+  .persona-file-chip .pfc-name { max-width: 48px; }
+  .persona-file-chip { flex-shrink: 0; }
+  /* Teleport 失败兜底：底部导航没接管统计胶囊时，原位 compact 行禁两行堆叠 */
+  .stats-line:not(.stats-teleported) { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  /* 图二修复（0907）：dock 贴左列底，app-main 的 52px 预留被 flex-1 容器吃掉一半
+     （overflow 子容器不带 padding 继承）→ 输入框底行被 fixed 导航盖住。
+     ★1012：底部导航（1011 极简版）已撤 ⇒ 64px 死区归零，只留 safe-area + 8px 呼吸位。 */
+  .app-container.is-mobile .input-dock {
+    padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+  }
+}
+/* 图六配套：模式/权限弹窗深色卡底（bg-white 被映射成 #111 与输入区同色=看不出是弹窗；
+   选中胶囊 bg-gray-100→#1d1d1d 在卡底上隐身→提亮一档） */
+html.dark .mode-popover { background-color: #1d1d1d; border-color: #2e2e2e; }
+html.dark .mode-popover .bg-gray-100 { background-color: #2e2e2e !important; }
+html.dark .mode-popover .text-gray-700 { color: #e9e9ef !important; }
+html.dark .mode-popover .text-gray-400 { color: #83838d !important; }
+
+/* ═══ 0907 动效三档（设置→外观，main.ts applyFx 挂类；full=默认不加类零开销）═══
+ * balanced：只停"永远在转"的装饰动画（发送钮流光/头像光环/脉冲/计时折线等）——
+ *   animation-iteration-count:1 让无限动画最多播一次；一次性入场动画不受影响。
+ * eco：在 balanced 基础上磨砂全关（退化为半透实底卡=磨砂设计自带兜底）、
+ *   所有过渡/动画时长归零（交互瞬达）、scroll-behavior 关闭平滑滚动。
+ * GSAP 内联动画（对话行点击弹性等，一次性 0.3s）CSS 管不到，成本极小未纳入。 */
+html.fx-balanced *, html.fx-balanced *::before, html.fx-balanced *::after {
+  animation-iteration-count: 1 !important;
+}
+/* ★ 0922z2d4（设计口径）：均衡档再降一层 —— **大面积毛玻璃减半**（保留材质感，不取消）。
+   实测毛玻璃约占 idle 主线程成本 10%；面积越大越贵，所以先压大面板（背景图开启时的侧栏/右侧工作区），
+   胶囊类小面积同步降一档。节能档仍然是"磨砂全关"。 */
+html.fx-balanced .app-container.has-bg .app-sidebar,
+html.fx-balanced .app-container.has-bg .right-docks > * {
+  -webkit-backdrop-filter: blur(8px) saturate(1.3) !important;
+  backdrop-filter: blur(8px) saturate(1.3) !important;
+}
+html.fx-balanced .stats-pill {
+  -webkit-backdrop-filter: blur(4px) !important;
+  backdrop-filter: blur(4px) !important;
+}
+html.fx-balanced .bgt-pill,
+html.fx-balanced .bgt-pop {
+  -webkit-backdrop-filter: blur(8px) saturate(1.3) !important;
+  backdrop-filter: blur(8px) saturate(1.3) !important;
+}
+html.fx-eco *, html.fx-eco *::before, html.fx-eco *::after {
+  animation-iteration-count: 1 !important;
+  animation-duration: 0.001s !important;
+  animation-delay: 0s !important;
+  transition-duration: 0.001s !important;
+  transition-delay: 0s !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+html.fx-eco { scroll-behavior: auto !important; }
+html.fx-eco * { scroll-behavior: auto !important; }
+
+/* ── 0913 字体大小（设置→外观）：app 内文字为 px 定值，改根字号无效 → 整体 zoom。
+ *   要点：① zoom 只加在 #app（Teleport 到 body 的弹窗不受影响——关闭按钮不会再跑出屏幕）；
+ *        ② #app 是 height:100vh —— zoom 后渲染尺寸会溢出，按缩放系数反向补偿宽高。 ── */
+html.ui-font-sm #app { zoom: 0.92; height: calc(100vh / 0.92); width: calc(100vw / 0.92); }
+html.ui-font-lg #app { zoom: 1.08; height: calc(100vh / 1.08); width: calc(100vw / 1.08); }
+/* 内层布局同样按 100vh 定高（.app-container），一并反向补偿（含移动端 100dvh 那条 !important） */
+html.ui-font-sm .app-container { height: calc(100vh / 0.92) !important; }
+html.ui-font-lg .app-container { height: calc(100vh / 1.08) !important; }
+
+/* ★1012 手机端兜底：上面两条把高度拉回 100vh（iOS Safari 的 100vh 含浏览器底栏 ⇒ 贴底那排按钮
+   被底栏盖住）；手机端改 dvh 跟随可视视口。PC 端 dvh === vh，零影响。
+   必须放在上面两条**之后**（同权重靠后者胜），否则会被它们盖回来。 */
+@media (max-width: 767px) {
+  html.ui-font-sm .app-container { height: calc(100dvh / 0.92) !important; }
+  html.ui-font-lg .app-container { height: calc(100dvh / 1.08) !important; }
+  html.ui-font-sm #app { height: calc(100dvh / 0.92); width: calc(100vw / 0.92); }
+  html.ui-font-lg #app { height: calc(100dvh / 1.08); width: calc(100vw / 1.08); }
+}
+
+/* ── 0914 开屏收尾（SplashScreen v4「框架态→上弹」）：
+     ① .nis-boot-frame：揭示阶段——界面只留"框架"（侧栏背景板 + 右上角窗口三按钮 win-ctrl-btn），
+        其余内容隐身（开屏粒子球淡出时，界面框架从背后自然显现）；
+     ② .nis-boot-in：落定阶段——移除 frame 的同时加它，各组件"轻微上弹"入位（下方 14px 浮入）。
+     仅冷启动开屏时由 SplashScreen 挂类；HMR/跳开屏场景不加类，界面保持默认（零副作用）。── */
+html.nis-boot-frame .app-sidebar > * { visibility: hidden !important; }
+html.nis-boot-frame .app-main * { visibility: hidden !important; }
+html.nis-boot-frame .app-main .win-ctrl-btn,
+html.nis-boot-frame .app-main .win-ctrl-btn * { visibility: visible !important; }
+
+@keyframes nisBootRiseIn {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+html.nis-boot-in .app-sidebar > * { animation: nisBootRiseIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+html.nis-boot-in .app-sidebar > *:nth-child(2) { animation-delay: 0.05s; }
+html.nis-boot-in .app-sidebar > *:nth-child(3) { animation-delay: 0.1s; }
+html.nis-boot-in .app-main > * { animation: nisBootRiseIn 0.52s cubic-bezier(0.22, 1, 0.36, 1) 0.06s both; }

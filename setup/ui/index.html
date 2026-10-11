@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>NIS Setup</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    background: #09090b;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    user-select: none; -webkit-user-select: none;
+  }
+  #bg { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .vignette {
+    position: fixed; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse at 50% 46%, transparent 0%, rgba(0, 0, 0, 0.62) 100%);
+  }
+  .app { position: relative; height: 100%; display: flex; flex-direction: column; }
+  /* 顶部条（无边框窗口气质 + 拖拽区） */
+  .bar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 22px;
+    font-size: 12px; color: rgba(255, 255, 255, 0.5);
+  }
+  .bar-title { color: rgba(255, 255, 255, 0.85); font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
+  .bar-hint {
+    font-size: 11px; color: rgba(255, 255, 255, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 999px; padding: 2px 10px;
+  }
+  .bar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .lang {
+    display: flex; align-items: center; gap: 2px;
+    border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 999px; padding: 2px;
+  }
+  .lang button {
+    border: 0; background: transparent; cursor: pointer;
+    font: inherit; font-size: 11px; color: rgba(255, 255, 255, 0.45);
+    padding: 2px 10px; border-radius: 999px; transition: all 0.18s ease;
+  }
+  .lang button:hover { color: #fff; }
+  .lang button.on { background: rgba(255, 255, 255, 0.92); color: #111827; font-weight: 600; }
+  .winbtns { display: flex; gap: 6px; }
+  .winbtns i {
+    width: 26px; height: 22px; display: flex; align-items: center; justify-content: center;
+    font-style: normal; font-size: 10px; color: rgba(255, 255, 255, 0.4);
+    border-radius: 6px; transition: background 0.2s; cursor: pointer;
+  }
+  .winbtns i:hover { background: rgba(255, 255, 255, 0.08); }
+  .winbtns i.x:hover { background: rgba(239, 68, 68, 0.7); color: #fff; }
+  main { flex: 1; position: relative; }
+  .page {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; text-align: center; padding: 0 36px 32px;
+    opacity: 0; pointer-events: none; transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+    transform: translateY(12px);
+  }
+  .page.active { opacity: 1; pointer-events: auto; transform: none; }
+  .logo-float { animation: floaty 4.2s ease-in-out infinite; }
+  @keyframes floaty { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+  .logo { width: 76px; height: 76px; object-fit: contain; filter: drop-shadow(0 0 22px rgba(139, 92, 246, 0.45)); }
+  .logo-fallback {
+    width: 76px; height: 76px; border-radius: 24px;
+    background: linear-gradient(135deg, #7c3aed, #6366f1);
+    display: none; align-items: center; justify-content: center;
+    font-size: 28px; font-weight: 800; letter-spacing: -1px;
+    box-shadow: 0 0 30px rgba(124, 58, 237, 0.5);
+  }
+  h1 { font-size: 22px; font-weight: 700; letter-spacing: 0.01em; }
+  .sub { font-size: 12.5px; color: rgba(255, 255, 255, 0.5); max-width: 480px; line-height: 1.7; }
+  .btn {
+    margin-top: 8px;
+    padding: 11px 32px; border-radius: 999px; border: none; cursor: pointer;
+    font-size: 14px; font-weight: 600; font-family: inherit;
+    background: #fff; color: #111827;
+    box-shadow: 0 16px 36px -16px rgba(255, 255, 255, 0.5);
+    transition: transform 0.18s ease, background 0.18s ease;
+  }
+  .btn:hover { background: #f3f4f6; transform: translateY(-1px); }
+  .btn:disabled { opacity: 0.45; cursor: default; transform: none; }
+  .btn-danger { background: #f87171; color: #1f1111; box-shadow: 0 16px 36px -16px rgba(248, 113, 113, 0.55); }
+  .btn-danger:hover { background: #fca5a5; }
+  .btn-ghost {
+    padding: 9px 18px; border-radius: 999px; cursor: pointer;
+    background: transparent; color: rgba(255, 255, 255, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    font-size: 12px; font-family: inherit;
+    transition: all 0.2s ease;
+  }
+  .btn-ghost:hover { color: #fff; border-color: rgba(255, 255, 255, 0.4); }
+  .pathline {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 11.5px; color: rgba(255, 255, 255, 0.4);
+  }
+  .pathline b { color: rgba(255, 255, 255, 0.72); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .pathline .mini {
+    border: 1px solid rgba(255, 255, 255, 0.16); background: transparent;
+    color: rgba(255, 255, 255, 0.55); font: inherit; font-size: 11px;
+    padding: 2px 10px; border-radius: 999px; cursor: pointer; transition: all 0.18s ease;
+  }
+  .pathline .mini:hover { color: #fff; border-color: rgba(255, 255, 255, 0.45); }
+  .check { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: rgba(255, 255, 255, 0.5); cursor: pointer; }
+  .check input { accent-color: #7c3aed; width: 14px; height: 14px; }
+  /* ── 过程页 ── */
+  #page-progress { justify-content: center; gap: 18px; }
+  .install-head { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .install-title { font-size: 17px; font-weight: 600; }
+  .install-path { font-size: 11px; color: rgba(255, 255, 255, 0.38); font-variant-numeric: tabular-nums; }
+  .percent { font-size: 42px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .percent small { font-size: 15px; font-weight: 600; color: rgba(255, 255, 255, 0.45); margin-left: 2px; }
+  .bar-track {
+    width: min(540px, 78vw); height: 8px; border-radius: 99px;
+    background: rgba(255, 255, 255, 0.1); overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%; width: 0%; border-radius: 99px;
+    background: linear-gradient(90deg, #7c3aed, #a78bfa 60%, #ffffff);
+    box-shadow: 0 0 18px rgba(139, 92, 246, 0.7);
+    transition: width 0.3s ease;
+  }
+  .steps { display: flex; flex-direction: column; gap: 8px; margin-top: 2px; min-width: 300px; }
+  .step {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 12.5px; color: rgba(255, 255, 255, 0.38);
+    transition: color 0.3s ease;
+  }
+  .step .dot {
+    width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    border: 1.5px solid rgba(255, 255, 255, 0.22);
+    font-size: 9px; color: transparent;
+    transition: all 0.3s ease;
+  }
+  .step.running { color: rgba(255, 255, 255, 0.92); }
+  .step.running .dot { border-color: rgba(167, 139, 250, 0.9); border-top-color: transparent; animation: spin 0.9s linear infinite; }
+  .step.done { color: rgba(255, 255, 255, 0.62); }
+  .step.done .dot { background: #10b981; border-color: #10b981; color: #fff; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .ticker {
+    width: min(540px, 78vw); height: 76px; overflow: hidden; position: relative;
+    border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.04);
+    mask-image: linear-gradient(180deg, transparent, #000 18%, #000 82%, transparent);
+    -webkit-mask-image: linear-gradient(180deg, transparent, #000 18%, #000 82%, transparent);
+  }
+  .ticker-inner { position: absolute; left: 0; right: 0; bottom: 0; padding: 6px 0; font-size: 10.5px; line-height: 19px; color: rgba(255, 255, 255, 0.32); font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+  .ticker-inner div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 14px; }
+  /* ── 完成页 / 错误页 ── */
+  .big-icon {
+    width: 72px; height: 72px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 30px;
+    animation: pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+  .big-icon.ok {
+    background: rgba(16, 185, 129, 0.14);
+    border: 1.5px solid rgba(16, 185, 129, 0.5);
+    color: #34d399; box-shadow: 0 0 40px rgba(16, 185, 129, 0.25);
+  }
+  .big-icon.err {
+    background: rgba(239, 68, 68, 0.14);
+    border: 1.5px solid rgba(239, 68, 68, 0.5);
+    color: #f87171; box-shadow: 0 0 40px rgba(239, 68, 68, 0.25);
+  }
+  @keyframes pop { from { transform: scale(0.6); opacity: 0; } to { transform: none; opacity: 1; } }
+  .errmsg {
+    max-width: 520px; font-size: 12px; line-height: 1.7; color: rgba(255, 255, 255, 0.55);
+    background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px; padding: 10px 14px; word-break: break-all; text-align: left;
+    font-family: ui-monospace, Consolas, monospace;
+  }
+  .foot-note { position: fixed; bottom: 14px; left: 0; right: 0; text-align: center; font-size: 10.5px; color: rgba(255, 255, 255, 0.22); pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+<div class="vignette"></div>
+
+<div class="app">
+  <header class="bar" data-tauri-drag-region>
+    <span class="bar-title" id="barTitle">NIS 安装程序</span>
+    <!-- 版本号由主进程 setup_info 下发（Rust 侧：manifest.version，读不到时用编译期 CARGO_PKG_VERSION）。
+         0918 之前这里是硬编码的 v0.0.1 —— 卸载器读不到 manifest 时就一直显示 v0.0.1（反馈）。 -->
+    <span class="bar-hint" id="barVer"></span>
+    <span class="bar-right">
+      <span class="lang">
+        <button id="langZh" class="on">中文</button>
+        <button id="langEn">EN</button>
+      </span>
+      <span class="winbtns">
+        <i id="btnMin">—</i>
+        <i id="btnClose" class="x">✕</i>
+      </span>
+    </span>
+  </header>
+
+  <main>
+    <!-- ① 欢迎 / 卸载确认 -->
+    <section id="page-welcome" class="page active">
+      <div class="logo-float">
+        <img class="logo" src="logo.png" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" />
+        <div class="logo-fallback">N</div>
+      </div>
+      <h1 id="wTitle">欢迎安装 NIS</h1>
+      <p class="sub" id="wSub">一个能记住你、陪你干活的桌面 Agent。安装只需要一点点时间。</p>
+      <div class="pathline">
+        <span id="wPathLabel">安装位置</span>
+        <b id="wPath">C:\Users\...\AppData\Local\Programs\NIS</b>
+        <button class="mini" id="btnPick">更改</button>
+      </div>
+      <div class="pathline" id="wSizeLine"><span>约 <b id="wSize">0</b> MB</span></div>
+      <label class="check" id="wDeleteWrap" style="display:none">
+        <input type="checkbox" id="wDeleteData" />
+        <span id="wDeleteLabel">同时删除用户数据（会话 / 记忆库 / 设置）</span>
+      </label>
+      <button class="btn" id="btnGo">开始安装</button>
+      <button class="btn-ghost" id="btnCancelWelcome">取消</button>
+    </section>
+
+    <!-- ② 过程页 -->
+    <section id="page-progress" class="page">
+      <div class="install-head">
+        <div class="install-title" id="pTitle">正在安装 NIS…</div>
+        <div class="install-path"><span id="pPathLabel">目标位置</span> <span id="pPath"></span></div>
+      </div>
+      <div class="percent" id="pct">0<small>%</small></div>
+      <div class="bar-track"><div class="bar-fill" id="fill"></div></div>
+      <div class="steps" id="steps">
+        <div class="step" data-at="3"><span class="dot">✓</span><span class="txt" data-step="0">准备安装目录</span></div>
+        <div class="step" data-at="8"><span class="dot">✓</span><span class="txt" data-step="1">解压程序文件</span></div>
+        <div class="step" data-at="86"><span class="dot">✓</span><span class="txt" data-step="2">配置运行环境</span></div>
+        <div class="step" data-at="94"><span class="dot">✓</span><span class="txt" data-step="3">创建快捷方式</span></div>
+      </div>
+      <div class="ticker"><div class="ticker-inner" id="ticker"></div></div>
+      <button class="btn-ghost" id="btnCancelRun">取消</button>
+    </section>
+
+    <!-- ③ 完成 -->
+    <section id="page-done" class="page">
+      <div class="big-icon ok">✓</div>
+      <h1 id="dTitle">安装完成</h1>
+      <p class="sub" id="dSub">NIS 已准备就绪。<br/>点击「完成」将启动 NIS —— 首次启动会带你完成一小段设置。</p>
+      <button class="btn" id="btnDone">完成</button>
+      <button class="btn-ghost" id="btnCloseDone">关闭</button>
+    </section>
+
+    <!-- ④ 出错 -->
+    <section id="page-error" class="page">
+      <div class="big-icon err">!</div>
+      <h1 id="eTitle">安装未能完成</h1>
+      <div class="errmsg" id="eMsg"></div>
+      <button class="btn" id="btnRetry">重试</button>
+      <button class="btn-ghost" id="btnCloseErr">关闭</button>
+    </section>
+  </main>
+</div>
+<div class="foot-note" id="footNote">NIS · 本地桌面 Agent</div>
+
+<script>
+/* ── 背景：紫色粒子球（对齐开屏 OrbitalSphere 的观感） ── */
+(function () {
+  const cv = document.getElementById('bg')
+  const ctx = cv.getContext('2d')
+  let W = 0, H = 0, cx = 0, cy = 0, R = 0
+  let pts = []
+  function build() {
+    W = cv.width = window.innerWidth * devicePixelRatio
+    H = cv.height = window.innerHeight * devicePixelRatio
+    cv.style.width = window.innerWidth + 'px'
+    cv.style.height = window.innerHeight + 'px'
+    cx = W / 2; cy = H * 0.45
+    R = Math.min(W, H) * 0.36
+    const N = 760
+    pts = []
+    for (let i = 0; i < N; i++) {
+      const t = (i + 0.5) / N
+      const phi = Math.acos(1 - 2 * t)
+      const theta = Math.PI * (1 + Math.sqrt(5)) * i
+      const r = R * (0.96 + Math.random() * 0.08)
+      pts.push({
+        x: r * Math.sin(phi) * Math.cos(theta),
+        y: r * Math.cos(phi),
+        z: r * Math.sin(phi) * Math.sin(theta),
+        s: 0.7 + Math.random() * 1.7,
+        ph: Math.random() * Math.PI * 2,
+        c: Math.random() < 0.14 ? 1 : 0,
+      })
+    }
+  }
+  build()
+  window.addEventListener('resize', build)
+  let a = 0
+  function frame() {
+    a += 0.0022
+    ctx.clearRect(0, 0, W, H)
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 1.5)
+    g.addColorStop(0, 'rgba(124, 58, 237, 0.14)')
+    g.addColorStop(0.5, 'rgba(99, 102, 241, 0.05)')
+    g.addColorStop(1, 'transparent')
+    ctx.fillStyle = g
+    ctx.fillRect(0, 0, W, H)
+    ctx.globalCompositeOperation = 'lighter'
+    const cosA = Math.cos(a), sinA = Math.sin(a)
+    const cosB = Math.cos(0.32), sinB = Math.sin(0.32)
+    for (const p of pts) {
+      let x = p.x * cosA - p.z * sinA
+      let z = p.x * sinA + p.z * cosA
+      const y = p.y * cosB - z * sinB
+      z = p.y * sinB + z * cosB
+      const depth = (z / R + 1) / 2
+      const tw = 0.72 + 0.28 * Math.sin(a * 7 + p.ph)
+      const alpha = (0.06 + depth * 0.5) * tw
+      const px = cx + x, py = cy + y
+      const size = p.s * (0.7 + depth * 0.9)
+      const rad = Math.max(1.2, size * 2.6)
+      const gg = ctx.createRadialGradient(px, py, 0, px, py, rad)
+      if (p.c) {
+        gg.addColorStop(0, 'rgba(255, 255, 255, ' + (alpha * 0.95).toFixed(3) + ')')
+        gg.addColorStop(0.4, 'rgba(196, 181, 253, ' + (alpha * 0.7).toFixed(3) + ')')
+      } else {
+        gg.addColorStop(0, 'rgba(167, 139, 250, ' + alpha.toFixed(3) + ')')
+        gg.addColorStop(0.55, 'rgba(124, 58, 237, ' + (alpha * 0.5).toFixed(3) + ')')
+      }
+      gg.addColorStop(1, 'transparent')
+      ctx.fillStyle = gg
+      ctx.beginPath()
+      ctx.arc(px, py, rad, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.globalCompositeOperation = 'source-over'
+    requestAnimationFrame(frame)
+  }
+  frame()
+})();
+
+/* ── i18n ── */
+const I18N = {
+  zh: {
+    barInstall: 'NIS 安装程序', barUninstall: 'NIS 卸载程序',
+    wTitle: '欢迎安装 NIS',
+    wSub: '一个能记住你、陪你干活的桌面 Agent。安装只需要一点点时间。',
+    wPathLabel: '安装位置', change: '更改', approx: '约',
+    /* 0920 二次修订（设计口径）：产出物与工作区都能自己导出，卸载时一起删掉没关系 → 文案写全 */
+    wDelete: '同时删除全部用户数据（会话 / 记忆库 / 知识库 / 设置与密钥 / 已下载的运行环境 / 对话工作区 / 导出备份）',
+    go: '开始安装', cancel: '取消',
+    pTitle: '正在安装 NIS…', pPathLabel: '目标位置',
+    steps: ['准备安装目录', '解压程序文件', '配置运行环境', '创建快捷方式'],
+    stepsUn: ['准备卸载', '移除程序文件', '清理缓存与残留', '清理快捷方式与注册表'],
+    dTitle: '安装完成',
+    dSub: 'NIS 已准备就绪。<br/>点击「完成」将启动 NIS —— 首次启动会带你完成一小段设置。',
+    done: '完成', close: '关闭',
+    eTitle: '安装未能完成', retry: '重试',
+    uTitle: '卸载 NIS',
+    uSub: '将从你的电脑上移除 NIS。你的会话、记忆与设置会保留，除非勾选下面的选项。',
+    uGo: '卸载', pTitleUn: '正在卸载 NIS…', uDone: '卸载完成',
+    uDoneSub: 'NIS 已从你的电脑上移除。',
+    eTitleUn: '卸载未能完成',
+    busy: '正在处理中…',
+  },
+  en: {
+    barInstall: 'NIS Setup', barUninstall: 'NIS Uninstall',
+    wTitle: 'Welcome to NIS Setup',
+    wSub: 'A desktop agent that remembers you and works alongside you. Setup takes only a moment.',
+    wPathLabel: 'Install to', change: 'Change', approx: 'about',
+    wDelete: 'Also delete ALL user data (sessions / memory / knowledge / settings & keys / downloaded runtimes / chat workspaces / export backups)',
+    go: 'Install', cancel: 'Cancel',
+    pTitle: 'Installing NIS…', pPathLabel: 'Target',
+    steps: ['Preparing install folder', 'Extracting program files', 'Configuring runtime', 'Creating shortcuts'],
+    stepsUn: ['Preparing uninstall', 'Removing program files', 'Cleaning cache & leftovers', 'Removing shortcuts & registry'],
+    dTitle: 'Setup complete',
+    dSub: 'NIS is ready.<br/>Click "Finish" to launch NIS — the first run walks you through a short setup.',
+    done: 'Finish', close: 'Close',
+    eTitle: 'Setup could not be completed', retry: 'Retry',
+    uTitle: 'Uninstall NIS',
+    uSub: 'NIS will be removed from your computer. Your sessions, memories and settings are kept unless you tick the option below.',
+    uGo: 'Uninstall', pTitleUn: 'Uninstalling NIS…', uDone: 'Uninstall complete',
+    uDoneSub: 'NIS has been removed from your computer.',
+    eTitleUn: 'Uninstall could not be completed',
+    busy: 'Working…',
+  }
+}
+let LANG = (navigator.language || 'zh').toLowerCase().startsWith('en') ? 'en' : 'zh'
+const T = (k) => I18N[LANG][k]
+
+/* ── Tauri 桥 ── */
+const TAURI = window.__TAURI__ || {}
+const invoke = TAURI.core ? TAURI.core.invoke : async () => { throw new Error('Tauri 未就绪') }
+const listen = TAURI.event ? TAURI.event.listen : async () => {}
+
+/* ── DOM ── */
+const $ = (id) => document.getElementById(id)
+const pages = {
+  welcome: $('page-welcome'), progress: $('page-progress'),
+  done: $('page-done'), error: $('page-error'),
+}
+function show(name) {
+  Object.entries(pages).forEach(([k, el]) => el.classList.toggle('active', k === name))
+}
+let INFO = { mode: 'install', product: 'NIS', version: '', defaultDir: '', installRoot: '', totalBytes: 0, fileCount: 0, mainBinary: 'nis-ui.exe' }
+let CHOSEN_DIR = ''
+let LAST_ERROR_STEP = 'welcome'
+
+/* ── 文案刷新 ── */
+function applyLang() {
+  const un = INFO.mode === 'uninstall'
+  $('langZh').classList.toggle('on', LANG === 'zh')
+  $('langEn').classList.toggle('on', LANG === 'en')
+  $('barTitle').textContent = un ? T('barUninstall') : T('barInstall')
+  // 版本号：只认主进程给的值（不再兜底成某个写死的旧版本号 —— 那正是"卸载器显示 v0.0.1"的来源）
+  $('barVer').textContent = INFO.version ? ('v' + INFO.version) : ''
+  $('wTitle').textContent = un ? T('uTitle') : T('wTitle')
+  $('wSub').textContent = un ? T('uSub') : T('wSub')
+  $('wPathLabel').textContent = un ? T('pPathLabel') : T('wPathLabel')
+  $('btnPick').style.display = un ? 'none' : ''
+  $('wDeleteLabel').textContent = T('wDelete')
+  $('wSizeLine').style.display = un ? 'none' : ''
+  $('btnGo').textContent = un ? T('uGo') : T('go')
+  $('btnGo').className = un ? 'btn btn-danger' : 'btn'
+  $('btnCancelWelcome').textContent = T('cancel')
+  $('pTitle').textContent = un ? T('pTitleUn') : T('pTitle')
+  $('pPathLabel').textContent = T('pPathLabel')
+  $('btnCancelRun').textContent = T('cancel')
+  $('dTitle').textContent = un ? T('uDone') : T('dTitle')
+  $('dSub').innerHTML = un ? T('uDoneSub') : T('dSub')
+  $('btnDone').style.display = un ? 'none' : ''
+  $('btnDone').textContent = T('done')
+  $('btnCloseDone').textContent = T('close')
+  $('eTitle').textContent = un ? T('eTitleUn') : T('eTitle')
+  $('btnRetry').textContent = T('retry')
+  $('btnCloseErr').textContent = T('close')
+  const stepEls = document.querySelectorAll('#steps .step .txt')
+  const labels = un ? T('stepsUn') : T('steps')
+  stepEls.forEach((el, i) => { el.textContent = labels[i] })
+  $('wDeleteWrap').style.display = un ? '' : 'none'
+  const mb = INFO.totalBytes ? Math.max(1, Math.round(INFO.totalBytes / 1048576)) : 0
+  $('wSize').textContent = mb ? String(mb) : '—'
+}
+
+/* ── 进度渲染 ── */
+const fillEl = $('fill'), pctEl = $('pct'), tickerEl = $('ticker')
+const stepEls = [...document.querySelectorAll('#steps .step')]
+let started = false
+let lastFile = ''
+/* 0919：显示过的最大百分比 —— **只增不减**。
+   安装/卸载开头都会先报 1%，紧接着第一次真实采样算出来≈0%，不挡的话进度条会当场倒退
+   （用户看到的"先到 1 又退回 0、重新开始读条"）。 */
+let shownPct = 0
+
+function resetProgress() {
+  fillEl.style.width = '0%'
+  pctEl.innerHTML = '0<small>%</small>'
+  stepEls.forEach(s => { s.className = 'step'; s.querySelector('.dot').textContent = '✓' })
+  tickerEl.innerHTML = ''
+  lastFile = ''
+  started = false
+  shownPct = 0
+}
+
+function renderProgress(pct, file) {
+  let p = Math.max(0, Math.min(100, pct))
+  if (p < shownPct) p = shownPct            // 不回退（后端采样抖动/四舍五入都不许倒退）
+  else shownPct = p
+  fillEl.style.width = p + '%'
+  pctEl.innerHTML = Math.round(p) + '<small>%</small>'
+  stepEls.forEach((s, i) => {
+    const at = Number(s.dataset.at)
+    const nextAt = stepEls[i + 1] ? Number(stepEls[i + 1].dataset.at) : 101
+    if (p >= nextAt) s.className = 'step done'
+    else if (p >= at) s.className = 'step running'
+    else s.className = 'step'
+  })
+  if (!file || file === lastFile) return
+  lastFile = file
+  const div = document.createElement('div')
+  const un = INFO.mode === 'uninstall'
+  div.textContent = (un ? (LANG === 'zh' ? '  移除  ' : '  remove  ') : (LANG === 'zh' ? '  解压  ' : '  extract ')) + file
+  tickerEl.appendChild(div)
+  while (tickerEl.children.length > 8) tickerEl.removeChild(tickerEl.firstChild)
+}
+
+/* ── 流程 ── */
+async function boot() {
+  try {
+    const info = await invoke('setup_info')
+    INFO = Object.assign(INFO, {
+      mode: info.mode, product: info.product, version: info.version,
+      defaultDir: info.defaultDir, installRoot: info.installRoot,
+      totalBytes: info.totalBytes, fileCount: info.fileCount, mainBinary: info.mainBinary,
+    })
+  } catch (e) { /* 浏览器里预览时忽略 */ }
+  CHOSEN_DIR = INFO.mode === 'uninstall' ? (INFO.installRoot || '') : (INFO.defaultDir || '')
+  $('wPath').textContent = CHOSEN_DIR
+  $('footNote').textContent = (INFO.product || 'NIS') + ' · ' + (LANG === 'zh' ? '本地桌面 Agent' : 'Local desktop agent')
+  applyLang()
+}
+
+$('langZh').onclick = () => { LANG = 'zh'; applyLang() }
+$('langEn').onclick = () => { LANG = 'en'; applyLang() }
+$('btnMin').onclick = () => invoke('win_minimize').catch(() => {})
+$('btnClose').onclick = () => invoke('win_close').catch(() => {})
+$('btnCloseDone').onclick = () => invoke('win_close').catch(() => {})
+$('btnCloseErr').onclick = () => invoke('win_close').catch(() => {})
+
+$('btnPick').onclick = async () => {
+  try {
+    const picked = await invoke('pick_dir', { current: CHOSEN_DIR })
+    if (picked) { CHOSEN_DIR = picked; $('wPath').textContent = picked }
+  } catch (e) {}
+}
+
+$('btnGo').onclick = async () => {
+  LAST_ERROR_STEP = 'welcome'
+  resetProgress()
+  $('pPath').textContent = CHOSEN_DIR
+  show('progress')
+  try {
+    if (INFO.mode === 'uninstall') {
+      await invoke('begin_uninstall', { root: CHOSEN_DIR, deleteData: !!$('wDeleteData').checked })
+    } else {
+      await invoke('begin_install', { dir: CHOSEN_DIR, runAfter: false })
+    }
+  } catch (e) {
+    showError(String(e && e.message ? e.message : e))
+  }
+}
+
+$('btnCancelWelcome').onclick = () => invoke('win_close').catch(() => {})
+$('btnCancelRun').onclick = async () => {
+  try { await invoke('cancel') } catch (e) {}
+  show(LAST_ERROR_STEP)
+}
+$('btnRetry').onclick = () => { show('welcome'); resetProgress() }
+$('btnDone').onclick = async () => {
+  try { await invoke('launch_app', { dir: CHOSEN_DIR, mainBinary: INFO.mainBinary }) } catch (e) {}
+  invoke('win_close').catch(() => {})
+}
+
+function showError(msg) {
+  $('eMsg').textContent = msg || 'unknown error'
+  show('error')
+}
+
+listen('setup:progress', (ev) => {
+  const p = ev.payload || {}
+  if (p.phase === 'done') {
+    setTimeout(() => show('done'), 500)
+    renderProgress(100, '')
+    return
+  }
+  renderProgress(p.pct || 0, p.file || '')
+})
+listen('setup:error', (ev) => showError(ev.payload))
+
+boot()
+</script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+{
+  "name": "pi-bridge",
+  "version": "1.0.0",
+  "description": "Bridge service: DSH frontend <-> Pi Agent <-> LongCat LLM",
+  "type": "module",
+  "main": "server.ts",
+  "scripts": {
+    "start": "node --import tsx/esm server.ts",
+    "dev": "node --import tsx/esm --watch server.ts"
+  },
+  "dependencies": {
+    "@agentclientprotocol/codex-acp": "^2.1.1",
+    "@earendil-works/pi-agent-core": "1.1.0",
+    "@earendil-works/pi-ai": "1.1.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "playwright-core": "^1.62.1",
+    "qrcode": "^1.5.4",
+    "undici": "^8.10.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/qrcode": "^1.5.6",
+    "@types/ws": "^8.5.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

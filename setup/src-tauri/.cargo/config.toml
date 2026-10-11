@@ -1,0 +1,10 @@
+# 0915 打包环境：crates.io 直连被网络代理拦截 → 走 rsproxy 镜像（sparse 索引 + 下载皆由镜像站提供）
+# 本文件作用域仅限 src-tauri 构建（不给全局 cargo 配置添乱）
+[source.crates-io]
+replace-with = 'rsproxy-sparse'
+
+[source.rsproxy-sparse]
+registry = "sparse+https://rsproxy.cn/index/"
+
+[net]
+git-fetch-with-cli = true

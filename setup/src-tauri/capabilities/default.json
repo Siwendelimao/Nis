@@ -1,0 +1,11 @@
+{
+  "identifier": "default",
+  "description": "NIS 安装器默认能力（自有命令 + 核心事件/窗口）",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-close"
+  ]
+}

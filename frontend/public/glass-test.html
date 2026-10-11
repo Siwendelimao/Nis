@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>磨砂玻璃诊断页</title>
+<style>
+  body { margin: 0; font-family: system-ui, sans-serif; background: #fff; }
+  .wrap { position: relative; height: 100vh; overflow: hidden; }
+  .scroller {
+    position: absolute; inset: 0;
+    overflow-y: auto; padding: 24px;
+  }
+  .scroller p { font-size: 15px; line-height: 1.9; color: #374151; margin: 0 0 18px; }
+  .card {
+    position: absolute; left: 40px; width: 420px;
+    border: 1px solid #e5e7eb; border-radius: 16px;
+    padding: 16px; color: #111;
+  }
+  .card h3 { margin: 0 0 8px; font-size: 14px; }
+  .card p { margin: 0; font-size: 13px; line-height: 1.7; }
+  /* 方案1：普通 backdrop-filter（与应用内一致） */
+  #c1 { top: 30px; background: rgba(255,255,255,0.25); backdrop-filter: blur(14px) saturate(150%); -webkit-backdrop-filter: blur(14px) saturate(150%); }
+  /* 方案2：同上 + 强制 GPU 升层 */
+  #c2 { top: 210px; background: rgba(255,255,255,0.25); backdrop-filter: blur(14px) saturate(150%); -webkit-backdrop-filter: blur(14px) saturate(150%); transform: translateZ(0); }
+  /* 方案3：重滤镜（若这个也不糊，说明环境完全不支持滤镜采样） */
+  #c3 { top: 390px; background: rgba(255,255,255,0.35); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); }
+  #result { position: absolute; right: 16px; top: 12px; z-index: 10; font: 12px/1.6 monospace; background: #f3f4f6; padding: 8px 12px; border-radius: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="result">检测中…</div>
+  <div class="scroller" id="scroller">
+    <p>向下滚动这段文字，让文字从三张卡片后面经过，观察卡片内的文字是否被【模糊】了。</p>
+    <p>方案1（左上）：与 NIS 应用完全相同的写法 backdrop-filter: blur(14px)。</p>
+    <p>方案2（左中）：同样的模糊 + translateZ(0) 强制 GPU 升层。</p>
+    <p>方案3（左下）：blur(24px) 重模糊。如果三张卡都只是"变白"而文字清晰可读，说明当前浏览器环境的 backdrop-filter 采样不可用（常见于远程桌面/禁用 GPU 加速/旧内核）。</p>
+    <script>
+      for (let i = 0; i < 40; i++) {
+        document.currentScript.insertAdjacentHTML('afterend', '');
+      }
+    </script>
+  </div>
+  <div class="card" id="c1"><h3>方案1：应用同款 blur(14px)</h3><p>观察这行字与背景文字交叠处是否被糊开。如果这行字清晰可读且背景文字也清晰 = 模糊未生效。</p></div>
+  <div class="card" id="c2"><h3>方案2：blur(14px) + GPU 升层</h3><p>同上观察点。如果方案1不糊而这张糊了，说明需要强制升层，我去改应用。</p></div>
+  <div class="card" id="c3"><h3>方案3：blur(24px) 重模糊</h3><p>如果连这张都不糊，说明当前环境的 backdrop-filter 整体不可用（RDP/禁用硬件加速/旧内核），需要换浏览器或关闭远程会话再试。</p></div>
+</div>
+<script>
+  // 填充长文本
+  const sc = document.getElementById('scroller');
+  let html = sc.innerHTML;
+  for (let i = 0; i < 60; i++) {
+    html += '<p>' + i + ' —— 这是滚动测试文本，用于从卡片背后经过。磨砂玻璃生效时，穿过卡片区域（页面左列三张白卡）的文字会被高斯糊开，只剩朦胧色块。' + '</p>';
+  }
+  sc.innerHTML = html;
+  // 支持性检测
+  const r = document.getElementById('result');
+  const sup1 = CSS.supports('backdrop-filter', 'blur(1px)');
+  const sup2 = CSS.supports('-webkit-backdrop-filter', 'blur(1px)');
+  r.textContent = 'CSS.supports backdrop-filter: ' + sup1 + ' / -webkit: ' + sup2 + ' / UA: ' + navigator.userAgent.slice(0, 80);
+</script>
+</body>
+</html>

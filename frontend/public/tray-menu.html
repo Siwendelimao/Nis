@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>NIS</title>
+<style>
+  /* 自绘托盘右键菜单（0919）
+     —— 由 Rust 懒建的无边框透明窗口承载（198x90 逻辑像素，见 lib.rs 的 TRAY_MENU_W/H）。
+     同源（http://127.0.0.1:<port>/）加载，所以主题/字体跟应用一致；
+     刻意**不引任何依赖**（这是 public 下的裸 HTML，不经过打包），IPC 直接走 __TAURI_INTERNALS__。 */
+  * { box-sizing: border-box; -webkit-user-select: none; user-select: none; }
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+  body {
+    font-family: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    font-size: 12.5px;
+    color: #374151;
+  }
+  /* 卡片：占满窗口、留 6px 给阴影透出去 */
+  .card {
+    position: absolute; inset: 6px;
+    background: #ffffff;
+  border: 1px solid #ececf1;
+  border-radius: 13px;
+  /* 0919 老大要求：去掉投影（托盘菜单贴着屏幕边缘弹出时，阴影会糊出一圈灰边） */
+    padding: 5px;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    animation: pop 0.11s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes pop { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: none; } }
+
+  .row {
+    flex: 1 1 0;
+    display: flex; align-items: center; gap: 9px;
+    padding: 0 10px;
+    border-radius: 9px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.1s ease, color 0.1s ease;
+  }
+  .row svg { width: 13px; height: 13px; flex: 0 0 auto; opacity: 0.85; }
+  .row:hover, .row.on { background: #f3f4f6; }
+  .row:active { background: #e9eaee; }
+  .row.danger { color: #dc2626; }
+  .row.danger:hover, .row.danger.on { background: #fef2f2; }
+  .row.danger:active { background: #fde8e8; }
+  .sep { height: 1px; margin: 4px 9px; background: #f1f1f4; flex: 0 0 auto; }
+
+  html.dark body { color: #d4d4dc; }
+  html.dark .card { background: #17171c; border-color: #2a2a33; }
+  html.dark .row:hover, html.dark .row.on { background: #26262d; }
+  html.dark .row:active { background: #2f2f38; }
+  html.dark .row.danger { color: #f87171; }
+  html.dark .row.danger:hover, html.dark .row.danger.on { background: rgba(239, 68, 68, 0.14); }
+  html.dark .sep { background: #26262e; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="row" id="rowShow" role="menuitem" tabindex="0">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+        <rect x="2.2" y="3.2" width="11.6" height="9.6" rx="2"/>
+        <path d="M2.2 6.2h11.6"/>
+      </svg>
+      <span>显示主界面</span>
+    </div>
+    <div class="sep"></div>
+    <div class="row danger" id="rowQuit" role="menuitem" tabindex="0">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+        <path d="M8 2.2v5.6"/><path d="M4.9 4.2a4.8 4.8 0 1 0 6.2 0"/>
+      </svg>
+      <span>退出 NIS</span>
+    </div>
+  </div>
+
+<script>
+  /* ── 1. 主题：Rust 建窗时把上次生效的主题塞进 ?t=dark|light；拿不到就跟随系统 ── */
+  (function () {
+    var t = new URLSearchParams(location.search).get('t') || 'auto'
+    var dark = t === 'dark' || (t === 'auto' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches)
+    if (dark) document.documentElement.classList.add('dark')
+  })()
+
+  /* ── 2. IPC：直接走注入的 __TAURI_INTERNALS__（本页不经过打包，拿不到 @tauri-apps/api） ── */
+  var TI = window.__TAURI_INTERNALS__
+  var LABEL = (TI && TI.metadata && TI.metadata.currentWindow && TI.metadata.currentWindow.label) || 'tray-menu'
+  function invoke(cmd, args) {
+    if (!TI || typeof TI.invoke !== 'function') return Promise.reject(new Error('no ipc'))
+    return TI.invoke(cmd, args || {})
+  }
+
+  var hidden = false
+  /* ★ 0920 修「右键托盘要点两三次才出来」：
+     真因是**失焦竞态** —— 右键那一刻，Windows 会把前台交给托盘/任务栏，
+     紧接着我们自己的 `blur` 就触发了：刚 show 出来的菜单被自己立刻 hide 掉
+     （用户看到的就是"点了没反应"，只好再点一次，而第二次同样可能被打掉，于是"要点两三次"）。
+     做法：把 show 之后的头 450ms 视为"开场保护期"，这期间的 blur 一律忽略。
+     Rust 侧是 hide → set_position → show → set_focus，所以每次弹出都会重新拿到 focus，
+     保护期随之刷新（focus 事件即刷新点）；页面 load 时先置一次，覆盖"刚建窗口就弹出"的情况。 */
+  var shownAt = Date.now()
+  var GUARD_MS = 450
+  function hide() {
+    if (hidden) return
+    if (Date.now() - shownAt < GUARD_MS) return   // 开场保护期内的失焦不算"用户点走了"
+    hidden = true
+    invoke('plugin:window|hide', { label: LABEL }).catch(function () {
+      /* ⚠️ 别再退化成"销毁窗口"：那会让下一次右键必须重新建一个 WebView2 窗口（几百毫秒），
+         表现就是"偶尔卡一下、要点两三次"。权限里已经给了 allow-hide，真失败就原地留着，
+         反正 8 秒安全网会收。 */
+    })
+  }
+  /* 每次被 Rust show + set_focus 出来：刷新保护期，并解锁 hidden（否则隐藏过一次后 hide 永久失效） */
+  window.addEventListener('focus', function () { shownAt = Date.now(); hidden = false })
+  function act(action) {
+    invoke('tray_action', { action: action }).catch(function () {})
+    hide()
+  }
+
+  document.getElementById('rowShow').addEventListener('click', function () { act('show') })
+  document.getElementById('rowQuit').addEventListener('click', function () { act('quit') })
+
+  /* ── 3. 收起时机 ── */
+  document.addEventListener('contextmenu', function (e) { e.preventDefault() })
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hide() })
+  window.addEventListener('blur', hide)
+  /* 鼠标移出菜单 → 延迟收起（中途回来就取消）。托盘菜单贴着光标弹出，光标初始在菜单之外，
+     所以这里只在**光标真的进来过**之后才起效（pointerleave 不会凭空触发）。 */
+  var leaveTimer = 0
+  /* 安全网：弹出来后 8 秒光标压根没进来过（＝没人用）→ 自己收掉。
+     Windows 前台锁定会让 SetForegroundWindow 失败，此时拿不到 blur 事件，没有这道兜底菜单可能赖着不走。 */
+  var unusedTimer = setTimeout(hide, 8000)
+  document.addEventListener('pointerleave', function () {
+    clearTimeout(leaveTimer)
+    leaveTimer = setTimeout(hide, 900)
+  })
+  document.addEventListener('pointerenter', function () { clearTimeout(leaveTimer); clearTimeout(unusedTimer) })
+</script>
+</body>
+</html>

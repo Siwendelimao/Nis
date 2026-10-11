@@ -1,0 +1,18 @@
+[package]
+name = "nis-setup"
+version = "1.1.0"
+description = "NIS Setup - 自绘安装/卸载向导（无边框 WebView 壳，驱动内置 NSIS 引擎）"
+authors = ["NIS"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2.0.6", features = [] }
+
+[dependencies]
+tauri = { version = "2.3.1", features = [] }
+tauri-plugin-dialog = "2.2.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]

@@ -1,0 +1,14 @@
+{
+  "name": "nis-0812",
+  "version": "1.0.9",
+  "private": true,
+  "description": "NIS 一体化项目根：frontend=Vue 前端 (nis-ui)，backend=Pi Agent 桥接服务 (pi-bridge)",
+  "scripts": {
+    "dev": "concurrently -n app,server -c blue,green \"npm run dev --prefix frontend\" \"npm start --prefix backend\"",
+    "dev:app": "npm run dev --prefix frontend",
+    "dev:server": "npm start --prefix backend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

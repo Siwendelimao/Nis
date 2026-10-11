@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>NIS Interface</title>
+  <script>
+    /* ★1011x【致命修复】crypto.randomUUID 只在"安全上下文"（https / localhost / 127.0.0.1）存在。
+       局域网用 http 访问时（http://192.168.1.18:5174）它**根本不存在** ⇒ 前端每个 RPC 都在
+       `crypto.randomUUID()` 这一行抛 TypeError ⇒ 所有接口全挂 ⇒ **卡在开屏页进不去**。
+       实测对照：本机 localhost 一切正常，手机/另一台电脑一律卡住 —— 就是这个原因，跟网络/防火墙/令牌都无关。
+       为何放这里：index.html 的内联脚本**先于 bundle 加载**，而 App.vue/stores 顶层初始化就会用到它，
+       放在 main.ts 里已经太晚（模块求值顺序不可控）。
+       兜底用 crypto.getRandomValues —— 它在非安全上下文**照常可用**，手搓 UUID v4 与原生行为等价。 */
+    (function () {
+      try {
+        if (typeof crypto !== 'undefined' &&
+            typeof crypto.randomUUID !== 'function' &&
+            typeof crypto.getRandomValues === 'function') {
+          crypto.randomUUID = function () {
+            var b = crypto.getRandomValues(new Uint8Array(16))
+            b[6] = (b[6] & 0x0f) | 0x40   // version 4
+            b[8] = (b[8] & 0x3f) | 0x80   // variant 10xx
+            var h = []
+            for (var i = 0; i < 16; i++) h.push((b[i] + 0x100).toString(16).slice(1))
+            return h.slice(0, 4).join('') + '-' + h.slice(4, 6).join('') + '-' +
+                   h.slice(6, 8).join('') + '-' + h.slice(8, 10).join('') + '-' + h.slice(10, 16).join('')
+          }
+        }
+      } catch (e) { /* 兜底失败就维持原状：至少不引入新错误 */ }
+    })()
+  </script>
+  <script>
+    /* ── 0918 修复「boot 页 → 闪黑一下 → 才进开屏动画」（老大反馈）──
+       旧写法：<html class="nis-boot"> + <style>html.nis-boot{background:#000}</style>
+       —— 底色**写死纯黑**。而后端就绪后是从 boot.html **导航**过来的，
+       本页第一帧（Vue/CSS 都还没起来）就是黑的，等应用主题生效再变回白/黑
+       ⇒ 浅色模式下必然闪一下黑。实测这就是"闪黑"的唯一来源。
+       现在：Rust 在导航 URL 上带 `t=dark|light`（它已读得到上次的主题），
+       这里在 **解析 body 之前** 就把底色刷成与 boot 页同一色 —— 两页同帧，肉眼接不上缝。
+       顺带把 `p`（boot 阶段已走过的进度）存到 window 上，交给 splash 当起点。 */
+    (function () {
+      var qs
+      try { qs = new URLSearchParams(location.search) } catch (e) { qs = { get: function () { return null } } }
+      var t = String(qs.get('t') || '')
+      var dark
+      if (t === 'dark') dark = true
+      else if (t === 'light') dark = false
+      else {
+        try { dark = window.matchMedia('(prefers-color-scheme: dark)').matches } catch (e) { dark = false }
+      }
+      var bg = dark ? '#000000' : '#ffffff'
+      document.documentElement.style.background = bg
+      var el = document.createElement('style')
+      el.id = 'nis-boot-bg'
+      el.textContent = 'html,body{background:' + bg + '}'
+      document.head.appendChild(el)
+      /* 接续帧（#nis-boot-frame）的主题也在这里定，避免它先按错主题闪一下 */
+      document.documentElement.classList.toggle('nbf-dark', dark)
+      var p = 0
+      try { p = Number(qs.get('p')) || 0 } catch (e) { /* ignore */ }
+      window.__nisBootBg = { dark: dark, progress: Math.max(0, Math.min(100, p)) }
+    })()
+  </script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <style>
+    /* ★ 0920（0.0.11）：与 frontend/public/boot.html 成对声明 —— 跨文档导航过渡。
+       本页是从 boot 页 `location.href` 导航过来的：不声明这个，导航瞬间会有一帧
+       「只有底色、没有内容」的空窗（浅色闪白 / 深色闪黑）。两页都声明后，
+       内核会保留 boot 页快照直到本页首帧就绪，再做交叉淡化 ⇒ 空窗消失。
+       不支持的内核直接忽略（回退现状，无副作用）。 */
+    @view-transition { navigation: auto; }
+
+    /* ── 0919「接续帧」：补上 boot 页与本页之间的那段空窗 ──
+       现象（老大反馈）：boot 页进度条走完 → 画面**空一下（闪）** → 又出现一根进度条。
+       真因：导航那一刻 boot 页连同 logo 和进度条一起被销毁，而本页的 #app 要等
+       bundle 加载 + Vue 挂载才有内容 —— 这段只有底色，所以是"闪一下"。
+       做法：这里放一份**与 boot.html / SplashScreen 完全同款**的静态帧（光晕 + logo + 进度条，
+       位置尺寸颜色逐值一致），条宽立刻按 URL 的 p 设好。于是导航后第一帧 == boot 尾帧，
+       空窗消失；随后 Vue 挂载，logo 与进度条**继续由这份 DOM 承担**（SplashScreen 不再画自己的），
+       收尾动画直接接着这条读完 → logo 蓄力跳起拉幕。全程只有一条进度条。
+       ⚠️ 数值必须与 frontend/public/boot.html 和 SplashScreen.vue 的三处保持一致（148px / 190×3 /
+       calc(50% + 104px)），任何一处改动都要同步另外两处。 */
+    #nis-boot-frame { position: fixed; inset: 0; z-index: 2147483000; pointer-events: none; overflow: hidden; }
+    #nis-boot-frame .nbf-glow {
+      position: absolute; left: 50%; top: 50%;
+      width: 380px; height: 380px; margin: -190px 0 0 -190px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(124, 58, 237, 0.40) 0%, rgba(99, 102, 241, 0.16) 45%, transparent 70%);
+      animation: nbfGlow 2.6s ease-in-out infinite;
+    }
+    @keyframes nbfGlow { 0%, 100% { opacity: 0.55; } 50% { opacity: 0.95; } }
+    /* ⚠️ 居中必须放在**外层锚点**上，不能放在 img 自己身上 ——
+       logo 的 transform 要留给收尾动画（playJellyOutro 用 gsap 动 x/y/scale/rotation）。
+       gsap 解析初始 transform 时**不会**把 `translate(-50%,-50%)` 折算成 px 清掉，
+       而是原样保留、再叠加自己的位移 → logo 被"多移了一次自身一半"
+       （实测摘走瞬间从 (614,330) 跳到 (536,252)，差的 76px 正好是自身一半），
+       于是位置偏了、绳子与 logo 上那个青点也就对不上了。
+       老版 SplashScreen 用的是 `.splash-logo-anchor` 包一层 —— 那才是对的做法。 */
+    #nis-boot-frame .nbf-logo-anchor {
+      position: absolute; left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+    }
+    #nis-boot-frame .nbf-logo {
+      display: block;
+      width: 74px; height: 74px; object-fit: contain;
+      will-change: transform;
+    }
+    #nis-boot-frame .nbf-bar {
+      position: absolute; left: 50%; top: calc(50% + 104px);
+      width: 190px; height: 3px; margin-left: -95px;
+      border-radius: 99px;
+      background: rgba(0, 0, 0, 0.08);
+      overflow: hidden;
+    }
+    #nis-boot-frame .nbf-bar-fill {
+      position: absolute; left: 0; top: 0; bottom: 0; width: 0%;
+      border-radius: 99px;
+      background: linear-gradient(90deg, #7c3aed, #a78bfa);
+      box-shadow: 0 0 12px rgba(139, 92, 246, 0.45);
+    }
+    html.nbf-dark #nis-boot-frame .nbf-bar { background: rgba(255, 255, 255, 0.14); }
+    html.nbf-dark #nis-boot-frame .nbf-bar-fill {
+      background: linear-gradient(90deg, #7c3aed, #a78bfa 60%, #ffffff);
+      box-shadow: 0 0 12px rgba(139, 92, 246, 0.65);
+    }
+    /* SplashScreen 挂载后：辉光交回它自己那份（避免两层叠加），本帧只继续提供 logo 与进度条 */
+    #nis-boot-frame.nbf-handoff .nbf-glow { display: none; }
+
+    /* ── 0919：粒子球（老大要求"读条界面也要有那颗在转的大球"）──
+       与 boot.html 用**同一个产物** orbital-boot.js（同一份 three.js 渲染器），
+       所以从 boot 页跳过来时球是"接着转"，不会换一颗。层级与开屏一致：球在底、辉光压上、logo/条在最上。
+       SplashScreen 里那份 <OrbitalSphere> 已改为**不渲染**（球统一由这一处承担），
+       收尾时由 SplashScreen 把它和辉光一起淡出。 */
+    #nis-boot-frame .nbf-orb { position: absolute; inset: 0; }
+    #nis-boot-frame .nbf-orb canvas { display: block; width: 100%; height: 100%; }
+
+    /* ── 0919：三个系统按钮（最小化 / 最大化·还原 / 关闭）──
+       位置尺寸配色照抄前端 WindowControls（右上角 28×28 圆钮、top 12 + right 10）：
+       开屏期由本帧提供，开屏结束后接续帧整体移除，应用自己那组正好接在同样的像素上。
+       本层是 pointer-events:none，按钮组单独开 auto 才能点。 */
+    #nis-boot-frame .nbf-wctl {
+      position: absolute; top: 12px; right: 10px; z-index: 2;
+      display: none; align-items: center; gap: 2px;
+      pointer-events: auto;
+    }
+    #nis-boot-frame.nbf-tauri .nbf-wctl { display: inline-flex; }
+    #nis-boot-frame .nbf-wctl button {
+      width: 28px; height: 28px; padding: 0;
+      border: none; border-radius: 50%;
+      background: transparent; color: #9ca3af;
+      cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+    #nis-boot-frame .nbf-wctl button:hover { background: rgba(0, 0, 0, 0.07); color: #374151; }
+    #nis-boot-frame .nbf-wctl button.is-close:hover { background: #ef4444; color: #ffffff; }
+    html.nbf-dark #nis-boot-frame .nbf-wctl button { color: #6f6f78; }
+    html.nbf-dark #nis-boot-frame .nbf-wctl button:hover { background: rgba(255, 255, 255, 0.1); color: #e9e9ef; }
+    html.nbf-dark #nis-boot-frame .nbf-wctl button.is-close:hover { background: #ef4444; color: #ffffff; }
+
+    /* 顶部拖动条（窗口无系统边框） */
+    #nis-boot-frame .nbf-dragbar { position: absolute; left: 0; top: 0; right: 0; height: 40px; pointer-events: auto; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <div id="nis-boot-frame" aria-hidden="true">
+    <div class="nbf-orb"><canvas id="nbf-orb-canvas"></canvas></div>
+    <div class="nbf-glow"></div>
+    <div class="nbf-logo-anchor"><img class="nbf-logo" src="/nis-logo2.png" alt="" draggable="false" /></div>
+    <div class="nbf-bar" id="nis-boot-bar"><div class="nbf-bar-fill" id="nis-boot-bar-fill"></div></div>
+
+    <div class="nbf-dragbar" id="nbf-dragbar"></div>
+    <div class="nbf-wctl" id="nbf-wctl">
+      <button type="button" data-act="minimize" title="最小化">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14" /></svg>
+      </button>
+      <button type="button" data-act="toggle-maximize" title="最大化 / 还原">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
+      </button>
+      <button type="button" class="is-close" data-act="close" title="关闭">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+      </button>
+    </div>
+  </div>
+  <!-- 接续帧的粒子球：与 boot 页同一份产物（frontend/src/boot/orbitalBall.ts → orbital-boot.js）
+       ★1012 手机端瘦身：这个文件约 503KB（内含一整套 three.js），而手机端只需要极简开屏 ——
+       手机访问时整段跳过（后续所有调用点都有 try/catch 兜底，球不存在不影响开屏与进入界面）。
+       用 document.write 是为了**保持同步加载顺序**（后面的脚本依赖它已就绪）。 -->
+  <script>
+    (function () {
+      try {
+        var narrow = window.matchMedia('(max-width: 767px)').matches
+        var coarse = window.matchMedia('(pointer: coarse)').matches
+        var ua = /Android|iPhone|iPod|iPad|Mobile/i.test(navigator.userAgent || '')
+        if (narrow && (coarse || ua)) return;   // 手机：不下载粒子球
+      } catch (e) { /* 判定失败就照常加载：宁可慢一点，也不能白屏 */ }
+      document.write('<script src="/orbital-boot.js"><\/script>');
+    })();
+  </script>
+  <script>
+    /* 条宽立刻 = boot 阶段走过的进度（p<0.01 时留 0：直接打开本页/开发模式不会平白多出一截） */
+    (function () {
+      var p = 0
+      try { p = Number(window.__nisBootBg && window.__nisBootBg.progress) || 0 } catch (e) { /* ignore */ }
+      var fill = document.getElementById('nis-boot-bar-fill')
+      if (fill) fill.style.width = Math.max(0, Math.min(100, p)).toFixed(2) + '%'
+    })()
+  </script>
+  <script>
+    /* ── 接续帧的粒子球 + 窗口按钮 ──
+       球：与 boot 页同一个渲染器、同样铺满视口，所以换页时是"接着转"。
+           ⚠️ 这里**必须先于 Vue 挂载**跑起来：否则 SplashScreen 已经把手势/收尾动画接上了，
+              球却晚一拍才出现（老大之前反馈的"闪一下"就是这么来的）。
+       按钮：Tauri 里才显示；✕ 走 window_action('close') —— Rust 侧按"界面是否就绪"分流
+             （未就绪=启动早期 → 直接退；就绪 → 交给关闭询问弹窗）。 */
+    (function () {
+      var TI = window.__TAURI_INTERNALS__
+      var frame = document.getElementById('nis-boot-frame')
+      if (TI && frame) frame.classList.add('nbf-tauri')
+
+      try {
+        var c = document.getElementById('nbf-orb-canvas')
+        if (c && typeof window.__nisMountOrbitalBall === 'function') window.__nisMountOrbitalBall(c)
+      } catch (e) { /* 球起不来不影响开屏 */ }
+
+      var bar = document.getElementById('nbf-wctl')
+      if (bar && TI) {
+        bar.addEventListener('click', function (ev) {
+          var t = ev.target
+          var b = t && t.closest ? t.closest('button[data-act]') : null
+          if (!b) return
+          try { TI.invoke('window_action', { action: b.getAttribute('data-act') }) } catch (e) { /* ignore */ }
+        })
+      }
+      var dg = document.getElementById('nbf-dragbar')
+      if (dg && TI) {
+        dg.addEventListener('mousedown', function (ev) {
+          var t = ev.target
+          if (t && t.closest && t.closest('.nbf-wctl')) return
+          try { TI.invoke('window_action', { action: 'drag' }) } catch (e) { /* ignore */ }
+        })
+      }
+    })()
+  </script>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

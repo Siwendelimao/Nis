@@ -1,0 +1,28 @@
+# NIS 自有命令的应用级 ACL 权限（Tauri v2）
+#
+# ★ 为什么必须有这个文件（0919 实测：打包版 "Command window_action not allowed by ACL"）：
+#   打包版的界面是后端从 `http://127.0.0.1:<port>` 提供的 —— 对 Tauri 来说这是**远程源**。
+#   tauri/src/webview/mod.rs 的判定是：
+#       if (plugin_command.is_some() || has_app_acl_manifest || !is_local) && acl.is_none() { 拒绝 }
+#   即：**非本地源**上的命令必须有显式授权，否则连自定义命令也一律拒绝
+#   （结果就是"点了没反应 / 报 not allowed by ACL"：退出、立即重启、托盘菜单点了都无效）。
+#   而 capability 里只写了 core:/dialog:/store: 这些插件权限，**没有应用自有命令的权限** → 全被拦。
+#
+# 命名规则（tauri-utils/src/acl/schema.rs）：
+#   应用清单（APP_ACL_KEY = "__app-acl__"）的标识符**不加前缀** ——
+#   所以 capability 里直接写 `nis-app-commands` 就能引用到本文件里的这个 permission。
+#
+# ⚠️ 一旦有了这个文件，`has_app_acl_manifest` 就为真 → **本机源也要过 ACL**，
+#    所以每个自定义命令都必须在这里放行，新增命令时别忘了加。
+
+[[permission]]
+identifier = "nis-app-commands"
+description = "NIS 自有命令：窗口动作（退出/隐藏/最小化/最大化）、重启应用、托盘菜单动作、打开路径/文件夹、开 devtools"
+commands.allow = [
+  "window_action",
+  "restart_app",
+  "tray_action",
+  "open_path",
+  "open_devtools",
+  "app_ui_ready",
+]

@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NIS</title>
+<style>
+  /* ★ 0920（0.0.11）：跨文档导航过渡 —— 消除"闪一下"的最后一处来源。
+     现象（老大反馈，0.0.10 仍在）：本页 `location.href` 跳到应用页时画面有**一瞬只剩底色**
+     （浅色闪白 / 深色闪黑）；因为进度条现在能接续 p，所以只是"没那么强烈"而已。
+     真因：这是**跨文档导航** —— 旧文档被销毁、新文档首帧只画出背景色
+     （接续帧的 DOM 要等 body 解析完），中间那一帧**没有任何内容**。
+     做法：两个页面都声明 `@view-transition { navigation: auto }`（另一个在 frontend/index.html），
+     内核会把旧页面快照留到新页面首帧就绪，再做交叉淡化 ⇒ 空窗消失。
+     ⚠️ 不支持该特性的内核**直接忽略**这两行，回退成现在的行为（零副作用，可放心留）。 */
+  @view-transition { navigation: auto; }
+
+  /* ── 0917：开屏页与前端 Splash（图2）视觉对齐 ──
+     此前这里是一个独立的「NIS + 正在启动本地服务」朴素页（图1），
+     用户反馈「打开软件先看到这个动画，能不能删掉、直接显示图2」。
+     物理上前端资源正是后端提供的，后端没起来就没法显示前端页面，
+     所以做法是：**把这个页整容成和 Splash 同一帧**（同底色、同 logo 尺寸与位置、
+     同款进度条与紫色光晕），交接时肉眼几乎看不出换过页。
+     0918（#7）：去掉原来的循环流光条，状态信息（正在连接本地后端）整合到进度条下方。 */
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: #ffffff;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+    /* 与 SplashScreen 的 .splash-bg 一致：浅色纯白 / 深色纯黑 */
+    transition: background 0.18s ease;
+  }
+  html.boot-dark body { background: #000000; }
+
+  /* 紫色光晕（对齐 .splash-glow） */
+  .glow {
+    position: fixed; left: 50%; top: 50%;
+    width: 380px; height: 380px; margin: -190px 0 0 -190px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(124,58,237,0.40) 0%, rgba(99,102,241,0.16) 45%, transparent 70%);
+    animation: glowPulse 2.6s ease-in-out infinite;
+  }
+  @keyframes glowPulse { 0%,100% { opacity: 0.55; } 50% { opacity: 0.95; } }
+
+  /* logo（对齐 index.html 的 .nbf-logo：74px；0919 老大要求"缩小一半"，由 148 → 74）
+     ⚠️ 三处必须同步：boot.html / index.html(#nis-boot-frame) / SplashScreen.vue。
+     这里用 transform 居中没问题（本页没有 gsap）；但 index.html 那份**必须**把居中放在
+     外层锚点上，因为 logo 的 transform 要留给收尾动画（详见那边注释）。 */
+  .logo {
+    position: fixed; left: 50%; top: 50%;
+    width: 74px; height: 74px; object-fit: contain;
+    transform: translate(-50%, -50%);
+  }
+
+  /* ── 0918 二次（老大反馈）：这里以前是"空轨道 + 一行『正在连接本地后端…』"，
+     老大要求：**去掉那行文案**，把这段等待**直接算进动画的进度条加载中**。
+     所以现在：进度条自己在**真实推进**（不是循环流光，也不是空轨道），
+     从 0 平滑爬到 88% 就停住（剩下的交给应用页的真实进度），全程**没有一个字**。
+     0919：进度改由宿主调 `__nisBootGo(base, theme)` **让本页自己带过去**（见下方脚本）。
+     旧做法（写 document.title 让宿主读）**实测不工作**：WebView2 里改 document.title 不会同步到
+     Win32 窗口标题 → 宿主读到的一直是 "NIS" → 应用页进度从 0 重来（"清零"）。 */
+  .bar {
+    position: fixed; left: 50%; top: calc(50% + 104px);
+    width: 190px; height: 3px; margin-left: -95px;
+    border-radius: 99px;
+    background: rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+  }
+  html.boot-dark .bar { background: rgba(255, 255, 255, 0.14); }
+  .bar-fill {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 0%;
+    border-radius: 99px;
+    background: linear-gradient(90deg, #7c3aed, #a78bfa);
+    box-shadow: 0 0 12px rgba(139, 92, 246, 0.45);
+  }
+  html.boot-dark .bar-fill {
+    background: linear-gradient(90deg, #7c3aed, #a78bfa 60%, #ffffff);
+    box-shadow: 0 0 12px rgba(139, 92, 246, 0.65);
+  }
+
+  /* 仅在异常/过慢时才有字（默认空 —— 正常路径全程无文案） */
+  .cap {
+    position: fixed; left: 50%; top: calc(50% + 118px);
+    transform: translateX(-50%);
+    max-width: 70vw; text-align: center;
+    font-size: 12px; line-height: 1.6;
+    color: #8a8a95;
+  }
+  html.boot-dark .cap { color: #7d7d88; }
+
+  /* ── 0919：粒子球（老大要求"读条界面也要有那颗在转的大球"）──
+     用的是**和前端 SplashScreen 同一份渲染器**（three.js，15000 点粒子云 + 6 环）：
+     由 backend/_bundle_boot_orb.mjs 打成 orbital-boot.js，这里用 script 标签直接调（src=/orbital-boot.js）。
+     位置层级与开屏一致：球在最底、辉光压在球上、logo 与进度条再往上（DOM 顺序即层级）。
+     ⚠️ 别在这里自己画球 —— 两处长得不一样的话，boot 页跳应用页时会"换一颗球"。 */
+  .orb { position: fixed; inset: 0; pointer-events: none; }
+  .orb canvas { display: block; width: 100%; height: 100%; }
+
+  /* ── 0919：三个系统按钮（最小化 / 最大化·还原 / 关闭）──
+     老大反馈：开屏这一屏也要能最小化/最大化/关闭（主窗口是 decorations(false)，系统不画）。
+     位置尺寸配色**照抄前端 WindowControls**（右上角 28×28 圆钮、top 12 + right 10），
+     这样开屏结束、接续帧被移除时，应用自己那组按钮正好接在同样的像素上。
+     按钮只在 Tauri 里显示（浏览器打开 boot.html 时隐藏）。 */
+  .wctl {
+    position: fixed; top: 12px; right: 10px; z-index: 20;
+    display: none; align-items: center; gap: 2px;
+  }
+  html.boot-tauri .wctl { display: inline-flex; }
+  .wctl button {
+    width: 28px; height: 28px; padding: 0;
+    border: none; border-radius: 50%;
+    background: transparent; color: #9ca3af;
+    cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .wctl button:hover { background: rgba(0, 0, 0, 0.07); color: #374151; }
+  .wctl button.w-close:hover { background: #ef4444; color: #ffffff; }
+  html.boot-dark .wctl button { color: #6f6f78; }
+  html.boot-dark .wctl button:hover { background: rgba(255, 255, 255, 0.1); color: #e9e9ef; }
+  html.boot-dark .wctl button.w-close:hover { background: #ef4444; color: #ffffff; }
+
+  /* 顶部拖动条：窗口无系统边框，靠这里拖（点按钮不算） */
+  .dragbar { position: fixed; left: 0; top: 0; right: 0; height: 40px; z-index: 10; }
+</style>
+<script>
+  /* 在解析 body 之前就把主题类挂上，避免先白后黑的闪烁 */
+  (function () {
+    var dark = true
+    try {
+      dark = window.matchMedia('(prefers-color-scheme: dark)').matches
+    } catch (e) { /* 取不到就按深色 */ }
+    var apply = function (v) {
+      document.documentElement.classList.toggle('boot-dark', v === 'dark')
+    }
+    window.__setBootTheme = function (v) { if (v === 'dark' || v === 'light') apply(v) }
+    apply(dark ? 'dark' : 'light')
+  })()
+</script>
+</head>
+<body>
+  <!-- 粒子球在最底（DOM 顺序即层级：球 → 辉光 → logo → 进度条） -->
+  <div class="orb"><canvas id="orb"></canvas></div>
+  <div class="glow"></div>
+  <img class="logo" src="/nis-logo2.png" alt="" draggable="false" />
+  <div class="bar"><div class="bar-fill" id="barFill"></div></div>
+  <div class="cap" id="cap"></div>
+
+  <div class="dragbar" id="dragbar"></div>
+  <div class="wctl" id="wctl">
+    <button type="button" data-act="minimize" title="最小化">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14" /></svg>
+    </button>
+    <button type="button" data-act="toggle-maximize" title="最大化 / 还原">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
+    </button>
+    <button type="button" class="w-close" data-act="close" title="关闭">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+    </button>
+  </div>
+
+  <!-- 开屏粒子球（独立产物，见 frontend/src/boot/orbitalBall.ts） -->
+  <script src="/orbital-boot.js"></script>
+  <script>
+    /* 粒子球 + 窗口按钮。都用 `__TAURI_INTERNALS__` 探环境：
+       浏览器里（直接开 boot.html）球照常转，按钮隐藏、点了也不报错。 */
+    (function () {
+      var TI = window.__TAURI_INTERNALS__
+      if (TI) document.documentElement.classList.add('boot-tauri')
+
+      /* ── 球 ── */
+      try {
+        var c = document.getElementById('orb')
+        if (c && typeof window.__nisMountOrbitalBall === 'function') window.__nisMountOrbitalBall(c)
+      } catch (e) {
+        /* 球起不来不影响开屏（进度条照旧） */
+      }
+
+      /* ── 窗口按钮 ── */
+      var bar = document.getElementById('wctl')
+      if (bar && TI) {
+        bar.addEventListener('click', function (ev) {
+          var t = ev.target
+          var b = t && t.closest ? t.closest('button[data-act]') : null
+          if (!b) return
+          try { TI.invoke('window_action', { action: b.getAttribute('data-act') }) } catch (e) { /* ignore */ }
+        })
+      }
+      /* ── 拖窗口（点按钮不触发）── */
+      var dg = document.getElementById('dragbar')
+      if (dg && TI) {
+        dg.addEventListener('mousedown', function (ev) {
+          var t = ev.target
+          if (t && t.closest && t.closest('.wctl')) return
+          try { TI.invoke('window_action', { action: 'drag' }) } catch (e) { /* ignore */ }
+        })
+      }
+    })()
+  </script>
+  <script>
+    /* 进度条自己推进：越接近上限越慢（永远不到 100%），全程无文案。
+       上限 88% —— 剩下的交给应用页（Splash 的真实进度接着这个值走）。 */
+    var fill = document.getElementById('barFill')
+    var capEl = document.getElementById('cap')
+    var failed = false
+    /* ★ 0920（0.0.11）：宿主叫走之后本页的读条由 `pushToFull()` 接管，tick 必须让位 */
+    var going = false
+    var p = 0
+    var t0 = (window.performance && performance.now) ? performance.now() : Date.now()
+    var CAP = 88
+    function now() { return (window.performance && performance.now) ? performance.now() : Date.now() }
+    function tick() {
+      if (failed || going) return
+      var el = (now() - t0) / 1000
+      var target = CAP * (1 - Math.exp(-el / 1.35))
+      if (target > p) p = target
+      if (fill) fill.style.width = p.toFixed(2) + '%'
+      /* ⚠️ 别再用 document.title 往宿主传进度（已废弃）：WebView2 里改 title 不会同步到
+         Win32 窗口标题，宿主读到的一直是 "NIS" → 应用页拿到 p=0 → 进度条从 0 重来。
+         现在走宿主 → 本页的 `__nisBootGo`（见下），进度由本页自己带过去。 */
+      requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+
+
+    function setTip(msg) {
+      if (!capEl) return
+      capEl.textContent = msg
+    }
+    setTimeout(function () {
+      if (!failed) setTip('本地服务启动较慢，请稍候；若长时间无响应，请重启应用')
+    }, 30000)
+    window.__bootFailed = function () {
+      failed = true
+      setTip('本地服务未能启动，请重启应用后重试')
+    }
+    /* 0919：由宿主（Rust）在后端就绪时调用 —— 让**本页带着自己最后一帧的真实进度**跳转。
+       旧做法是把进度写进 document.title（`NISBOOT:NN`）让宿主读，**实测读不到**
+       （WebView2 的 document.title 不会同步到窗口标题，宿主 12s 内读到的恒为 "NIS"）
+       → 应用页拿到的 p 是 0 → 进度条从 0 重来，看起来像"又冒出一根条"。
+       现在宿主只传「地址 + 主题」，进度用本页自己的 p（就是这一帧条宽的那个值），
+       同源跳转、参数自带，不依赖任何反向通信。
+
+       ★ 0920（0.0.11）改：**先把条走满，再导航**。
+       背景（老大实测）：跨文档导航那一瞬会有一帧"只有底色"（浅色闪白 / 深色闪黑），
+       试过窗口 background_color、接续帧都去不掉。那就把它**分段**，让那一瞬落在
+       「读条结束」这个天然断点上 —— 观感就变成"读条走满 → 换场 → 收尾动画"，
+       而不是"读条走到一半闪一下"。所以这里 260ms 把条从当前值推到 100% 再跳，
+       应用页接续帧接到的就是满条，不会再出现"条又自己爬一截"。
+       ⚠️ 本页的 `tick()` 会持续把 p 往 88% 拉，必须先用 `going` 让它让位。 */
+    window.__nisBootGo = function (base, theme) {
+      try {
+        if (going) return
+        going = true
+        var from = p
+        var t0 = now()
+        var DUR = 260
+        var push = function () {
+          var k = Math.min(1, (now() - t0) / DUR)
+          var e = 1 - Math.pow(1 - k, 3) /* easeOutCubic */
+          p = from + (100 - from) * e
+          if (fill) fill.style.width = p.toFixed(2) + '%'
+          if (k < 1) { requestAnimationFrame(push); return }
+          location.href = base + '?p=100' + (theme ? '&t=' + theme : '')
+        }
+        requestAnimationFrame(push)
+      } catch (e) { /* ignore */ }
+    }
+
+    /* 0920：开屏这一页也要吃掉"浏览器语义"快捷键 —— 读条期间手一抖按 F5 / Ctrl+R，
+       整个开屏会从头再来一遍（而且 0.0.8 起应用页还要重新走一次初始化）。
+       这里只拦最要紧的几个（刷新 / 开发者工具），跟应用页的 appShortcuts.ts 同一口径；
+       应用页那份更全，这页活着的时间很短，不必重复全部。 */
+    window.addEventListener('keydown', function (ev) {
+      var k = ev.key
+      var hit = k === 'F5' || k === 'F12'
+        || (ev.ctrlKey && (k === 'r' || k === 'R' || k === 'p' || k === 'P'))
+        || (ev.ctrlKey && ev.shiftKey && (k === 'i' || k === 'I' || k === 'j' || k === 'J'))
+      if (hit) { ev.preventDefault(); ev.stopPropagation() }
+    }, { capture: true })
+  </script>
+</body>
+</html>
