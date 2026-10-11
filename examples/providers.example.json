@@ -1,0 +1,63 @@
+{
+  "$comment": "NIS 供应商配置模板 —— 复制到数据目录下的 providers.json 再填自己的 key（开发态 backend/data/，安装版 %APPDATA%\\nis\\data\\）。推荐直接用界面「设置 → 供应商」配置，它会正确加密落盘。",
+  "$fields": {
+    "provider.id/name/base": "唯一 id、显示名、API 基址（OpenAI 协议，结尾不带 /chat/completions）",
+    "provider.apiKey": "你的密钥；NIS 落盘时会加密（Windows DPAPI）",
+    "provider.models[]": "可只写 { id, name }；inputPrice/outputPrice 是每百万 token 价格（用于用量估算，可省）",
+    "provider.proxyUrl": "可选，单独给这家供应商走代理",
+    "providerActive / activeModelId": "默认供应商与默认模型",
+    "backgroundProviderId / backgroundModelId": "后台小任务（记忆提炼、标题生成）用的模型，留空=跟随默认"
+  },
+  "providers": [
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "base": "https://api.openai.com/v1",
+      "enabled": true,
+      "apiKey": "sk-REPLACE_WITH_YOUR_KEY",
+      "models": [
+        {
+          "id": "gpt-4o-mini",
+          "name": "gpt-4o-mini",
+          "maxContext": 128000
+        }
+      ],
+      "keyHint": ""
+    },
+    {
+      "id": "deepseek",
+      "name": "DeepSeek",
+      "base": "https://api.deepseek.com/v1",
+      "enabled": false,
+      "apiKey": "sk-REPLACE_WITH_YOUR_KEY",
+      "models": [
+        {
+          "id": "deepseek-chat",
+          "name": "deepseek-chat",
+          "maxContext": 65536
+        }
+      ],
+      "keyHint": ""
+    },
+    {
+      "id": "ollama",
+      "name": "Ollama (本地)",
+      "base": "http://127.0.0.1:11434/v1",
+      "enabled": false,
+      "apiKey": "ollama",
+      "models": [
+        {
+          "id": "qwen2.5:7b",
+          "name": "qwen2.5:7b",
+          "maxContext": 32768
+        }
+      ],
+      "keyHint": "本地服务，key 随便填"
+    }
+  ],
+  "providerActive": "openai",
+  "activeModelId": "gpt-4o-mini",
+  "backgroundProviderId": "",
+  "backgroundModelId": "",
+  "backgroundEffort": ""
+}

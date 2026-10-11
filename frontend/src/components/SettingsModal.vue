@@ -1778,7 +1778,42 @@ async function browserClearCookies() {
 
 // 打开"浏览器"设置页拉权威参数 + 自动拉 cookie（0908③：此前 cookie 要点一次"刷新"才显示，
 // 且后端旧实现不带 sessionId 只查未启动的 default 实例=恒 0；后端现已聚合所有会话实例）
-watch(activeTab, (v) => { if (v === 'browser') { void browserStore.loadSettings(bRpc); void browserLoadCookies() } }, { immediate: true })
+/* ── 1014k：开源许可 / 第三方组件（设置 → 关于）──────────────────────────────
+ * 数据来源：frontend/public/third-party-notices.json（生成器：D:\nis-open-tools\gen_notices.mjs，
+ * 内容 = node 依赖 + Rust crate 的 name@version 按许可分组；仓库里另有完整版 THIRD-PARTY-NOTICES.md）。
+ * 为什么懒加载：1518 个组件，打开设置就渲染会卡；默认只显示总数，点「查看清单」才展开。
+ * ⚠️ 这两个定义必须放在下面 watch 之前 —— watch 带 immediate，若 activeTab 初始就是 about，
+ *    放在后面会撞 TDZ（记忆里的老坑：esbuild 会掩盖 TDZ，原生跑才暴露）。 */
+const noticesOpen = ref(false)
+const notices = reactive({
+  loaded: false,
+  failed: false,
+  total: 0,
+  license: 'MIT',
+  groups: [] as Array<{ license: string; items: Array<{ name: string; version: string }> }>,
+  crates: [] as string[],
+})
+async function loadNotices() {
+  if (notices.loaded || notices.failed) return
+  try {
+    const res = await fetch('/third-party-notices.json')
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+    const j = await res.json()
+    notices.total = Number(j.total || 0)
+    notices.license = String(j.projectLicense || 'MIT')
+    notices.groups = Array.isArray(j.groups) ? j.groups : []
+    notices.crates = Array.isArray(j.crates) ? j.crates : []
+    notices.loaded = true
+  } catch {
+    /* 拉不到就标记失败（关于页那块提示"见仓库 THIRD-PARTY-NOTICES.md"），不影响别的功能 */
+    notices.failed = true
+  }
+}
+
+watch(activeTab, (v) => {
+  if (v === 'browser') { void browserStore.loadSettings(bRpc); void browserLoadCookies() }
+  if (v === 'about') void loadNotices()
+}, { immediate: true })
 
 </script>
 
@@ -3375,6 +3410,40 @@ watch(activeTab, (v) => { if (v === 'browser') { void browserStore.loadSettings(
                     <span class="text-[11px] text-gray-500">{{ c.desc }}</span>
                   </div>
                   <p class="text-[11px] text-gray-400 leading-relaxed">{{ t('settings.about.creditsMore') }}</p>
+                </div>
+                <!-- 1014k：开源许可与第三方组件（数据来自 public/third-party-notices.json） -->
+                <div class="mb-6">
+                  <h3 class="text-sm font-[640] text-gray-900 mb-3 dark:text-gray-100">{{ t('settings.about.notices') }}</h3>
+                  <div class="flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl bg-gray-50 dark:bg-gray-800 mb-2">
+                    <span class="text-[13px] text-gray-700 dark:text-gray-200 shrink-0">{{ t('settings.about.licenseLabel') }}</span>
+                    <span class="text-xs text-gray-500">{{ notices.license }} License</span>
+                  </div>
+                  <div class="flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl bg-gray-50 dark:bg-gray-800 mb-2">
+                    <div class="flex-1 min-w-0">
+                      <span class="text-[13px] text-gray-700 dark:text-gray-200">{{ t('settings.about.noticesCount', { n: notices.total }) }}</span>
+                      <p class="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{{ t('settings.about.noticesHint') }}</p>
+                    </div>
+                    <button
+                      class="btn btn-secondary btn-sm shrink-0"
+                      :disabled="!notices.loaded"
+                      @click="noticesOpen = !noticesOpen"
+                    >{{ noticesOpen ? t('settings.about.noticesHide') : t('settings.about.noticesShow') }}</button>
+                  </div>
+                  <div v-if="noticesOpen" class="max-h-72 overflow-auto rounded-xl bg-gray-50 dark:bg-gray-800 px-3.5 py-3">
+                    <p v-if="!notices.loaded" class="text-[11px] text-gray-400">
+                      清单未加载（部署时缺少 third-party-notices.json）；仓库里的 THIRD-PARTY-NOTICES.md 有完整清单。
+                    </p>
+                    <template v-else>
+                      <div v-for="g in notices.groups" :key="g.license" class="mb-3">
+                        <div class="text-[11px] font-[640] text-gray-500 mb-1">{{ g.license }} · {{ g.items.length }}</div>
+                        <div class="text-[10px] text-gray-400 leading-relaxed break-all">{{ g.items.map(i => i.name + ' ' + i.version).join('、') }}</div>
+                      </div>
+                      <div v-if="notices.crates.length">
+                        <div class="text-[11px] font-[640] text-gray-500 mb-1">Rust crates · {{ notices.crates.length }}</div>
+                        <div class="text-[10px] text-gray-400 leading-relaxed break-all">{{ notices.crates.join('、') }}</div>
+                      </div>
+                    </template>
+                  </div>
                 </div>
                 <!-- 0915：开发者（用户拍板：开发者模式开关 + 重启） -->
                 <div class="mb-6">

@@ -1,0 +1,63 @@
+{
+  "$comment": "NIS 通道配置模板（QQ 官方机器人 / 微信 / 远程访问）—— 复制到数据目录下的 channels.json。强烈建议用界面「设置 → 接入」配置：它会校验并正确落盘。",
+  "$fields": {
+    "channels.<id>.enabled": "是否启用该通道",
+    "channels.<id>.permissionMode": "权限档位：self_audit（放行但留痕，通道默认）/ full_access（完全放行）/ confirm（每次确认，IM 里可能卡住，不建议）",
+    "channels.<id>.bots[]": "该通道下的机器人；QQ 可多个，微信单账号；secret 就是平台的 AppSecret / bot_token",
+    "channels.remote.remoteToken": "远程访问令牌（手机/另一台电脑用 ?token= 访问时校验），自己生成一串随机字符",
+    "channels.qq.stream": "QQ 单聊流式回复开关（打字机效果）"
+  },
+  "version": 1,
+  "channels": {
+    "qq": {
+      "enabled": false,
+      "providerId": "",
+      "modelId": "",
+      "effort": "",
+      "presetId": "",
+      "permissionMode": "self_audit",
+      "accountId": "",
+      "nickname": "",
+      "bots": [
+        {
+          "id": "bot_example",
+          "accountId": "REPLACE_WITH_QQ_BOT_APPID",
+          "secret": "REPLACE_WITH_QQ_BOT_SECRET",
+          "nickname": "我的机器人",
+          "enabled": false,
+          "createdAt": 0,
+          "presetId": "",
+          "providerId": "",
+          "modelId": ""
+        }
+      ],
+      "updatedAt": 0,
+      "stream": true
+    },
+    "wechat": {
+      "enabled": false,
+      "providerId": "",
+      "modelId": "",
+      "effort": "",
+      "presetId": "",
+      "permissionMode": "self_audit",
+      "accountId": "",
+      "nickname": "",
+      "bots": [],
+      "updatedAt": 0
+    },
+    "remote": {
+      "enabled": false,
+      "providerId": "",
+      "modelId": "",
+      "effort": "",
+      "presetId": "",
+      "permissionMode": "self_audit",
+      "accountId": "",
+      "nickname": "",
+      "bots": [],
+      "remoteToken": "REPLACE_WITH_RANDOM_TOKEN",
+      "updatedAt": 0
+    }
+  }
+}
