@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="no-js" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NIS · 装在自己机器上的 AI 工作台</title>
+<meta name="description" content="NIS 是一个装在自己电脑上的 AI 工作台：长期记忆 + 知识库、能干活的 Agent、手机网页与 QQ/微信接入，兼容任意 OpenAI 协议模型，数据全部留在本机。开源 MIT。">
+<meta name="theme-color" content="#0a0a0b">
+<meta property="og:title" content="NIS · 你的私有 AI 工作台">
+<meta property="og:description" content="长期记忆 + 知识库 + 完整工具链，桌面端与手机网页同源，数据全部留在本机。开源 MIT。">
+<meta property="og:type" content="website">
+<link rel="icon" href="assets/icon.png">
+<link rel="apple-touch-icon" href="assets/icon.png">
+<link rel="stylesheet" href="styles.css">
+<script>
+  /* 主题：localStorage → 系统偏好 → 默认深色。
+     必须内联同步执行（早于首帧渲染），否则会先闪一下错的主题。 */
+  (function () {
+    var d = document.documentElement
+    try {
+      var t = localStorage.getItem('nis-theme')
+      if (t !== 'light' && t !== 'dark') {
+        t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+      }
+      d.setAttribute('data-theme', t)
+    } catch (e) { /* 读不到就保持默认深色 */ }
+    d.className = 'js'
+  })()
+</script>
+</head>
+<body>
+
+<!-- 背景氛围层：光池 + 漂移光斑 + 同心圆环 + 噪点（纯装饰；滚动时各层以不同速度位移，形成纵深） -->
+<div class="bg" aria-hidden="true">
+  <span class="bg__pool"></span>
+  <span class="bg__blob bg__blob--1"></span>
+  <span class="bg__blob bg__blob--2"></span>
+  <span class="bg__blob bg__blob--3"></span>
+  <span class="bg__ring"></span>
+  <span class="bg__noise"></span>
+</div>
+
+<div class="glow" id="glow" aria-hidden="true"></div>
+
+<!-- ============ 顶部导航 ============ -->
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="#top">
+      <img src="assets/nis-logo.png" alt="" width="28" height="28">
+      <span>NIS</span>
+    </a>
+    <nav class="nav__links" aria-label="页面导航">
+      <a href="#shots">界面</a>
+      <a href="#features">能力</a>
+      <a href="#start">上手</a>
+      <a href="#changelog">更新日志</a>
+      <a href="#faq">常见问题</a>
+    </nav>
+    <div class="nav__actions">
+      <button class="theme-toggle" id="themeToggle" type="button" title="切换深色 / 浅色" aria-label="切换深色 / 浅色">
+        <span class="tt-sun" aria-hidden="true">☀</span>
+        <span class="tt-moon" aria-hidden="true">☾</span>
+      </button>
+      <a class="btn btn--ghost btn--sm" href="https://github.com/Siwendelimao/Nis" target="_blank" rel="noopener">GitHub</a>
+      <a class="btn btn--primary btn--sm" href="#download">下载</a>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- ============ 首屏 ============ -->
+  <section class="hero">
+    <div class="wrap">
+      <p class="tag rise" style="--d:80ms">开源 · MIT · 会话与密钥都留在本机</p>
+      <h1>
+        <span class="h1-line"><span style="--d:200ms">你的私有 AI 工作台</span></span>
+      </h1>
+      <p class="lede rise" style="--d:460ms">记得住你说过的话，能真的动手干活，出门在外也能叫到它。</p>
+      <div class="cta rise" style="--d:560ms">
+        <a class="btn btn--primary btn--lg" href="https://ghfast.top/https://github.com/Siwendelimao/Nis/releases/latest/download/NIS_Setup_1.1.3_x64.exe">下载 Windows 版</a>
+        <a class="btn btn--ghost btn--lg" href="https://github.com/Siwendelimao/Nis" target="_blank" rel="noopener">看看源码</a>
+      </div>
+      <p class="hero__note rise" style="--d:660ms">v1.1.3 · 69.4 MB · Windows 10/11 · 安装不需要管理员权限 · 数据都在你本机</p>
+    </div>
+    <span class="scroll-hint" aria-hidden="true">往下看<i></i></span>
+  </section>
+
+  <!-- ============ 界面展示（占位，素材到位自动替换） ============ -->
+  <section class="section" id="shots">
+    <div class="wrap">
+      <p class="eyebrow" data-reveal>界面预览</p>
+      <h2 data-reveal>它长什么样</h2>
+      <p class="lede lede--sub" data-reveal>左边是对话与项目，右边是干活现场；工具调用、文件历史、记忆召回都在同一条时间线上。</p>
+
+      <div class="shots" data-reveal>
+        <!-- 界面用 HTML/CSS 复刻（不是截图）：清晰、自适应、且跟着官网深浅主题自动换色。
+             以后若想换成真截图，把图放进 assets（shot-1-dark/light.png）即可，JS 会自动盖上去。 -->
+        <figure class="shot" data-shot-dark="assets/shot-1-dark.png" data-shot-light="assets/shot-1-light.png" data-shot="assets/shot-1-dark.png" data-alt="NIS 桌面端主界面">
+          <div class="shot__win">
+            <div class="shot__bar"><i></i><i></i><i></i><span>NIS</span></div>
+            <div class="shot__body">
+              <div class="mock mock--desk" aria-hidden="true">
+                <aside class="mock__side">
+                  <div class="mock__brand"><span class="mock__logo">N</span><span class="mock__name">NIS</span><span class="mock__ver">v1.1.3</span></div>
+                  <nav class="mock__nav">
+                    <span class="mock__navitem"><i class="mock__ico"></i>新建对话</span>
+                    <span class="mock__navitem"><i class="mock__ico"></i>搜索</span>
+                    <span class="mock__navitem"><i class="mock__ico"></i>工具</span>
+                    <span class="mock__navitem"><i class="mock__ico"></i>定时任务</span>
+                    <span class="mock__navitem"><i class="mock__ico"></i>Agent</span>
+                    <span class="mock__navitem"><i class="mock__ico"></i>skill 仓库</span>
+                    <span class="mock__navitem"><i class="mock__ico"></i>知识库</span>
+                    <span class="mock__navitem"><i class="mock__ico"></i>记忆库</span>
+                  </nav>
+                  <div class="mock__seg"><span class="is-on">聊天</span><span>项目</span></div>
+                  <ul class="mock__list">
+                    <li class="is-on"><b>销售数据分析</b><em>把 xlsx 按月汇总好</em></li>
+                    <li><b>周报整理</b><em>本周记录已整理</em></li>
+                    <li><b>插件开发</b><em>番茄时钟已装好</em></li>
+                    <li><b>网页抓取</b><em>已保存 12 条</em></li>
+                    <li><b>初次问候</b><em>好呀，模式已启动</em></li>
+                    <li><b>写点短文</b><em>图收到啦</em></li>
+                  </ul>
+                  <div class="mock__foot"><i class="mock__ico"></i><i class="mock__ico"></i><i class="mock__ico"></i></div>
+                </aside>
+
+                <main class="mock__main">
+                  <header class="mock__titlebar">
+                    <span class="mock__conv">销售数据分析</span>
+                    <span class="mock__meta">a17b-9c2e</span>
+                    <span class="mock__mode">标准模式</span>
+                    <span class="mock__win"><i></i><i></i><i class="is-close"></i></span>
+                  </header>
+
+                  <div class="mock__tabbar">
+                    <span class="mock__tab is-on">对话</span>
+                    <span class="mock__tabbar-right"><em>浏览器</em><em>日志</em><em>工作区</em><em>时光机</em></span>
+                  </div>
+
+                  <div class="mock__chat">
+                    <div class="mock__bubble mock__bubble--me">把 D:\报告\销售数据.xlsx 按月份汇总，出一份能直接打开的页面</div>
+                    <div class="mock__who"><span class="mock__dot"></span>NIS</div>
+                    <div class="mock__tools">
+                      <span class="mock__tool"><b>读取文件</b>销售数据.xlsx</span>
+                      <span class="mock__tool"><b>运行命令</b>汇总脚本</span>
+                      <span class="mock__tool"><b>写入文件</b>销售汇总.html</span>
+                    </div>
+                    <div class="mock__ai">汇总好了：1–9 月共 55 单、合计 ¥484,457，页面已生成。<br>
+                      顺带发现两处数据问题 —— 3 月有一行日期是 <span class="mock__mono">2025/3/32</span>；<span class="mock__mono">SO-2025-0020</span> 的金额与「数量 × 单价」对不上。</div>
+                    <div class="mock__art"><span class="mock__art-ico">H</span><span class="mock__art-name">销售汇总.html</span><span class="mock__art-size">12 KB</span></div>
+                  </div>
+
+                  <div class="mock__composer">
+                    <div class="mock__status"><em>上下文 12.4%</em><em>3 轮</em><em>24 段</em><em>缓存 97%</em></div>
+                    <div class="mock__box">
+                      <div class="mock__placeholder">描述你想要构建的内容，/ 调用指令，@ 文件</div>
+                      <div class="mock__boxbar"><i class="mock__ico"></i><i class="mock__ico"></i><span class="mock__slash">/</span><span class="mock__at">@</span></div>
+                      <div class="mock__boxright"><span class="mock__model"><i class="mock__mdot"></i>deepseek / v3</span><span class="mock__send">↑</span></div>
+                    </div>
+                  </div>
+                </main>
+              </div>
+            </div>
+          </div>
+          <figcaption>桌面端 · 项目会话</figcaption>
+        </figure>
+
+        <figure class="shot shot--phone" data-shot-dark="assets/shot-2-dark.jpg" data-shot-light="assets/shot-2-light.jpg" data-shot="assets/shot-2-dark.jpg" data-alt="NIS 手机网页版">
+          <div class="shot__win">
+            <div class="shot__bar shot__bar--phone"><span></span></div>
+            <div class="shot__body">
+              <div class="mock mock--phone" aria-hidden="true">
+                <div class="mock__mhead"><span class="mock__mlogo"></span>NIS<span class="mock__mstate"></span></div>
+                <div class="mock__mchat">
+                  <div class="mock__bubble mock__bubble--me is-sm">把销售数据按月份汇总一下</div>
+                  <div class="mock__who is-sm"><span class="mock__dot"></span>NIS</div>
+                  <div class="mock__tools is-sm">
+                    <span class="mock__tool"><b>读取</b>销售数据.xlsx</span>
+                    <span class="mock__tool"><b>写入</b>销售汇总.html</span>
+                  </div>
+                  <div class="mock__bubble mock__bubble--ai is-sm">好啦，1–9 月汇总完成，页面在 <span class="mock__mono">销售汇总.html</span>。</div>
+                </div>
+                <div class="mock__minput"><span>发消息…</span><span class="mock__send">↑</span></div>
+              </div>
+            </div>
+          </div>
+          <figcaption>手机网页版 · 与后端同源</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 能力六宫格 ============ -->
+  <section class="section" id="features">
+    <div class="wrap">
+      <p class="eyebrow" data-reveal>核心能力</p>
+      <h2 data-reveal>不是又一个聊天框</h2>
+      <p class="lede lede--sub" data-reveal>「AI 记得住你」「能真的动手干活」「走到哪都能叫到它」——这三件事凑齐，才算工作台。</p>
+
+      <div class="grid" data-stagger>
+        <article class="card" data-reveal>
+          <h3>长期记忆 + 知识库</h3>
+          <p>四层记忆架构，对话、资料、项目沉淀成可检索的长期上下文，不用每次从头讲一遍。</p>
+        </article>
+        <article class="card" data-reveal>
+          <h3>真能干活的 Agent</h3>
+          <p>文件读写、命令行、浏览器操作、定时任务、多分身并行；带权限分级与文件历史，改错了能回滚。</p>
+        </article>
+        <article class="card" data-reveal>
+          <h3>多端接入</h3>
+          <p>桌面端与手机网页同源；可选接入 QQ / 微信机器人，让它在群里、私聊里替你值班。</p>
+        </article>
+        <article class="card" data-reveal>
+          <h3>自带你的模型</h3>
+          <p>兼容任意 OpenAI 协议供应商（OpenAI、DeepSeek、通义、Kimi、LongCat…），也能接本地 Ollama 或 Codex / ACP。</p>
+        </article>
+        <article class="card" data-reveal>
+          <h3>项目工作区</h3>
+          <p>按项目组织对话，Agent 在项目目录里干活，产出与下载各归各位，不把桌面堆乱。</p>
+        </article>
+        <article class="card" data-reveal>
+          <h3>数据在你自己手里</h3>
+          <p>会话、记忆、密钥全部存在本机，API Key 本地加密落盘（Windows DPAPI），不上传第三方。</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 三步上手 + 领包 ============ -->
+  <section class="section" id="start">
+    <div class="wrap wrap--split">
+      <div>
+        <p class="eyebrow" data-reveal>三步上手</p>
+        <h2 data-reveal>十分钟就能开始干活</h2>
+        <ol class="steps" data-reveal>
+          <li>
+            <b>下载装上</b>
+            <span>下载 <code>NIS_Setup_1.1.3_x64.exe</code>，双击安装（当前用户安装，不需要管理员）。</span>
+          </li>
+          <li>
+            <b>填上你的 Key</b>
+            <span>打开「设置 → 供应商」，填你自己那家的 API Key；想完全离线就接本地 Ollama。</span>
+          </li>
+          <li>
+            <b>开始用</b>
+            <span>建个项目、把要处理的文件扔进去，剩下的交给它 —— 记得住，也能动手。</span>
+          </li>
+        </ol>
+        <p class="fineprint" data-reveal>目前支持 Windows 10 / 11；macOS 与 Linux 尚未适配。</p>
+      </div>
+
+      <!-- 下载卡片：直链 + 备用线路 + 版本信息 + 答疑群 -->
+      <aside class="join glass" id="download" data-reveal>
+        <p class="eyebrow eyebrow--tight">下载</p>
+        <h3>Windows 安装包</h3>
+        <p class="join__desc">双击安装，不需要管理员权限。装好后去「设置 → 供应商」填自己的 API Key 就能开工。</p>
+
+        <a class="btn btn--primary btn--wide btn--lg dl-main"
+           href="https://ghfast.top/https://github.com/Siwendelimao/Nis/releases/latest/download/NIS_Setup_1.1.3_x64.exe">下载 NIS_Setup_1.1.3_x64.exe</a>
+        <p class="fineprint">走的是国内加速线路（第三方公益服务，偶尔失效）—— 打不开就用下面的备用链接。</p>
+
+        <dl class="dl-meta">
+          <dt>版本</dt><dd>v1.1.3<a class="dl-meta__link" href="#changelog">查看更新日志</a></dd>
+          <dt>大小</dt><dd>69.4 MB</dd>
+          <dt>系统</dt><dd>Windows 10 / 11（x64）</dd>
+          <dt>安装</dt><dd>当前用户安装，不需要管理员</dd>
+        </dl>
+
+        <div class="dl-links">
+          <a href="https://github.com/Siwendelimao/Nis/releases/latest/download/NIS_Setup_1.1.3_x64.exe" target="_blank" rel="noopener">GitHub 官方直链</a>
+          <a href="https://gh-proxy.com/https://github.com/Siwendelimao/Nis/releases/latest/download/NIS_Setup_1.1.3_x64.exe" target="_blank" rel="noopener">备用加速 ①</a>
+          <a href="https://ghproxy.net/https://github.com/Siwendelimao/Nis/releases/latest/download/NIS_Setup_1.1.3_x64.exe" target="_blank" rel="noopener">备用加速 ②</a>
+          <a href="https://github.com/Siwendelimao/Nis/releases" target="_blank" rel="noopener">全部版本</a>
+        </div>
+
+        <div class="group">
+          <span class="group__label">群号</span>
+          <code class="group__num" id="groupNum">1127440330</code>
+          <button class="btn btn--ghost btn--sm" id="copyBtn" type="button">复制</button>
+        </div>
+        <p class="fineprint">装不上、或者想提需求？加群直接问。</p>
+
+        <div class="qr qr--sm" data-shot="assets/qq-group.png">
+          <div class="qr__ph">
+            <b>群二维码待补</b>
+            <span>存成 <code>site/assets/qq-group.png</code> 会自动显示</span>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ============ 版本更新日志 ============ -->
+  <section class="section" id="changelog">
+    <div class="wrap wrap--narrow">
+      <p class="eyebrow" data-reveal>更新日志</p>
+      <h2 data-reveal>每一版都在改什么</h2>
+      <p class="cl__lead" data-reveal>只列“你会感觉到”的改动，从新到旧。完整提交记录见 GitHub Releases。</p>
+
+      <!-- 列表由 main.js 从 changelog.json 渲染（单一数据源：以后加日志只改那个 json）。
+           没有 JS、或文件拉不到时，走下面 noscript / JS 里的兜底，不留空白。 -->
+      <div class="cl" id="changelogList" data-reveal></div>
+
+      <noscript>
+        <div class="cl">
+          <article class="cl__item cl__item--top">
+            <div class="cl__head">
+              <span class="cl__ver">v1.1.3</span>
+              <span class="cl__badge">最新</span>
+              <span class="cl__date">2026-10-12</span>
+            </div>
+            <ul class="cl__list">
+              <li>修复换机后云隧道连不上（报 Permission denied）：导入或拷贝来的私钥文件权限过宽时 ssh 会拒绝使用，现在启动隧道前会自动收紧权限。</li>
+              <li>远程接入相关的配置（远程访问开关与访问令牌、云隧道连接与隧道密钥）现在能随「通道与远程接入」一起导出与导入。</li>
+            </ul>
+          </article>
+          <p class="cl__more"><a href="https://github.com/Siwendelimao/Nis/releases" target="_blank" rel="noopener">在 GitHub 查看全部版本</a></p>
+        </div>
+      </noscript>
+    </div>
+  </section>
+
+  <!-- ============ 开发者方式 ============ -->
+  <section class="section" id="dev">
+    <div class="wrap wrap--narrow">
+      <p class="eyebrow" data-reveal>开发者</p>
+      <h2 data-reveal>也可以命令行来</h2>
+      <p class="lede lede--sub" data-reveal>不想点按钮的话，一行命令就能把安装包拉到当前目录；想改代码就从源码跑。</p>
+
+      <div class="code-cards" data-stagger>
+        <div class="code-card" data-reveal>
+          <p class="code-card__label">一行拉取安装包（Windows PowerShell）</p>
+          <div class="code-card__body">
+            <pre><code id="cmd-dl">$u = 'https://github.com/Siwendelimao/Nis/releases/latest/download'
+irm "$u/NIS_Setup_1.1.3_x64.exe" -OutFile NIS_Setup_1.1.3_x64.exe</code></pre>
+            <button class="btn btn--ghost btn--sm" type="button" data-copy="cmd-dl">复制</button>
+          </div>
+        </div>
+
+        <div class="code-card" data-reveal>
+          <p class="code-card__label">从源码跑（需要 Node 20+ 与 pnpm）</p>
+          <div class="code-card__body">
+            <pre><code id="cmd-src">git clone https://github.com/Siwendelimao/Nis.git
+cd Nis &amp;&amp; pnpm install &amp;&amp; pnpm dev</code></pre>
+            <button class="btn btn--ghost btn--sm" type="button" data-copy="cmd-src">复制</button>
+          </div>
+        </div>
+      </div>
+      <p class="fineprint" data-reveal>源码方式跑起来后打开 <code>http://127.0.0.1:5174</code>；手机接入和桌面端一样，走局域网 IP 即可。</p>
+    </div>
+  </section>
+
+  <!-- ============ FAQ ============ -->
+  <section class="section" id="faq">
+    <div class="wrap wrap--narrow">
+      <p class="eyebrow" data-reveal>常见问题</p>
+      <h2 data-reveal>你可能想问</h2>
+
+      <div class="faq" data-reveal>
+        <details>
+          <summary>一定要自己配 API Key 吗？</summary>
+          <p>要。NIS 不自带模型额度，你用哪家模型就配哪家的 Key。也可以接本地 Ollama，那样完全离线、不花一分钱。</p>
+        </details>
+        <details>
+          <summary>支持哪些系统？</summary>
+          <p>目前只在 Windows 10 / 11 上验证过（桌面端基于 Tauri 2 + WebView2）。代码里只有少量 Windows 专属部分，欢迎 PR 补平台适配。</p>
+        </details>
+        <details>
+          <summary>我的数据会被上传吗？</summary>
+          <p>不会。会话、记忆、文件都在本机；只有你自己配置的模型 API 会被调用。</p>
+        </details>
+        <details>
+          <summary>收费吗？</summary>
+          <p>NIS 本身开源免费（MIT 协议）。模型费用由你用哪家供应商自己决定，跟 NIS 无关。</p>
+        </details>
+        <details>
+          <summary>需要装 Python 吗？</summary>
+          <p>不做语义记忆检索就不需要；想要完整的记忆 / 知识库功能，建议装 Python 3.10 以上。</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ============ 页脚 ============ -->
+<footer class="footer">
+  <div class="wrap footer__inner">
+    <div class="footer__brand">
+      <img src="assets/nis-logo.png" alt="" width="24" height="24">
+      <span>NIS</span>
+    </div>
+    <p class="footer__line">
+      MIT License · 作者：斯文的狸猫 × Nis ·
+      <a href="https://github.com/Siwendelimao/Nis" target="_blank" rel="noopener">GitHub</a> ·
+      QQ 群 1127440330
+    </p>
+    <p class="footer__line footer__line--dim">NIS（中文名「纽斯」）—— 名字取自作者的 AI 搭档。</p>
+    <p class="footer__line footer__line--dim">
+      项目内含 1518 个第三方开源组件，许可清单见仓库 <code>THIRD-PARTY-NOTICES.md</code> 或程序内「设置 → 关于」。
+    </p>
+  </div>
+</footer>
+
+<script src="changelog.js"></script>
+<script src="main.js" defer></script>
+</body>
+</html>
