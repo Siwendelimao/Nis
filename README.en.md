@@ -1,8 +1,13 @@
 # NIS · Your Private AI Workbench
 
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/Siwendelimao/Nis?label=release&color=blue)](../../releases)
+[![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey.svg)](#quick-start)
+[![Stars](https://img.shields.io/github/stars/Siwendelimao/Nis?label=stars&color=yellow)](../../stargazers)
+
 [简体中文](README.md) · **English**
 
-> **A local-first AI workbench running on your own machine** — long-term memory, knowledge base and a full toolchain. Desktop, mobile web, and optional QQ / WeChat bots.
+> **A self-hosted, local-first AI agent workbench** — long-term memory, a searchable knowledge base and a full toolchain (files, shell, browser, scheduled tasks). Desktop app + mobile web + optional QQ / WeChat bots, driven by your own model (OpenAI-compatible, local Ollama, or external agents via ACP).
 
 NIS (Chinese: 纽斯) is not just another chat box. It brings together three things most AI clients lack: **it remembers you, it actually does the work, and you can reach it from anywhere.**
 
@@ -12,6 +17,13 @@ NIS (Chinese: 纽斯) is not just another chat box. It brings together three thi
 - 🔌 **Bring your own model** — works with any OpenAI-compatible provider (OpenAI, DeepSeek, Qwen, Kimi, LongCat, local Ollama…), plus external agents such as Codex / ACP
 - 🗂 **Project workspaces** — organise chats per project; the agent works inside the project directory, and outputs/artifacts stay where they belong
 - 🔒 **Your data stays yours** — sessions, memory and API keys live on your machine; keys are encrypted at rest (Windows DPAPI)
+
+<p align="center">
+  <img src="screenshots/desktop-dark.png" alt="NIS desktop app (dark theme)" width="880">
+</p>
+<p align="center">
+  <img src="screenshots/desktop-light.png" alt="NIS desktop app (light theme)" width="880">
+</p>
 
 ---
 

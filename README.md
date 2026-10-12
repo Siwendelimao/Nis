@@ -1,8 +1,13 @@
 # NIS · 你的私有 AI 工作台
 
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/Siwendelimao/Nis?label=release&color=blue)](../../releases)
+[![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey.svg)](#快速开始)
+[![Stars](https://img.shields.io/github/stars/Siwendelimao/Nis?label=stars&color=yellow)](../../stargazers)
+
 **简体中文** · [English](README.en.md)
 
-> **装在自己机器上的 AI 工作台** —— 长期记忆 + 知识库 + 完整工具链，桌面端、手机网页、QQ / 微信多端接入。
+> **自托管 AI 工作台（self-hosted AI agent）** —— 长期记忆 + 知识库 + 完整工具链。桌面端、手机网页、QQ / 微信多端接入，模型用你自己的 API Key。
 
 NIS（中文名「纽斯」）不是又一个聊天框。它把「AI 记得住你、能真的动手干活、走到哪都能叫到它」这三件事凑齐了：
 
@@ -12,6 +17,13 @@ NIS（中文名「纽斯」）不是又一个聊天框。它把「AI 记得住�
 - 🔌 **自带你的模型** —— 兼容任意 OpenAI 协议供应商（OpenAI、DeepSeek、通义、Kimi、LongCat、本地 Ollama…），也可以接 Codex / ACP 这类外部 Agent
 - 🗂 **项目工作区** —— 按项目组织对话，Agent 在项目目录里干活，产出与下载各归各位
 - 🔒 **数据在你自己手里** —— 会话、记忆、密钥全部存在本机；API Key 本地加密落盘（Windows DPAPI）
+
+<p align="center">
+  <img src="screenshots/desktop-dark.png" alt="NIS 桌面端界面（深色主题）" width="880">
+</p>
+<p align="center">
+  <img src="screenshots/desktop-light.png" alt="NIS 桌面端界面（浅色主题）" width="880">
+</p>
 
 ---
 
@@ -98,6 +110,9 @@ examples/          配置模板
 
 **Q：我的数据会被上传吗？**
 不会。会话、记忆、文件都在本机；只有你自己配置的模型 API 会被调用。
+
+**Q：它和 ChatGPT / Claude 那些官方客户端有什么不同？**
+它是一个**自托管（self-hosted）的开源 AI Agent**：模型由你自己的 Key 驱动，会话 / 记忆 / 文件 / 密钥全在本机；除聊天外还带完整工具链（文件读写、命令行、浏览器操作、定时任务、多分身并行），并能接入 QQ / 微信替你值班 —— 相当于给自己配一个随叫随到的本地 AI 工作台。
 
 ---
 
