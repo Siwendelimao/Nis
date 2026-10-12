@@ -517,7 +517,21 @@ export const useChatStore = defineStore('chat', () => {
     if (!res.ok) throw new Error(`Bridge API ${method} failed: ${res.status}`)
     const data = await res.json()
     if (data.result?.ok === false) throw new Error(data.result.error)
-    return data.result?.value
+    /* ★1012：后端 RPC 分发的 default 分支会回 `{ ok:true, _unhandled: method }`（静默降级）——
+       前端原来把它当成功 ⇒「操作看着成功、其实后端没这东西」（1012 定时任务面板保存无效即此坑）。
+       这里**不改调用方行为**（保持兼容：有些调用拿 _unhandled 当"后端没这能力"的探测），
+       但**显式暴露**：控制台指名告警 + 记入 window.__nisUnhandledMethods + 抛全局事件
+       `nis:unhandled-rpc`，让"接口没接上"一眼可见，不必再靠猜。 */
+    const value = data.result?.value
+    if (value && typeof value === 'object' && (value as any)._unhandled) {
+      const um = String((value as any)._unhandled)
+      const w = window as any
+      w.__nisUnhandledMethods = w.__nisUnhandledMethods || {}
+      w.__nisUnhandledMethods[um] = (w.__nisUnhandledMethods[um] || 0) + 1
+      console.warn(`[bridge] ⚠ 后端未实现该方法：${um} —— 本次调用没有任何后端效果（可能被调用方当成成功）`)
+      try { window.dispatchEvent(new CustomEvent('nis:unhandled-rpc', { detail: { method: um } })) } catch { /* 事件失败不影响调用 */ }
+    }
+    return value
   }
 
   function onMessage(handler: (msg: ChatMessage) => void) {

@@ -657,7 +657,7 @@ import { fetchQqMenu, syncQqMenu } from './channels/qqMenu.ts'
    监听、零定时器（定时器与降级策略都在 server.ts 这边，见 QqStreamState 注释）。 */
 import { sendQqStreamFrame, shouldPushFrame, clipStreamText, QQ_STREAM_MAX_CHARS } from './channels/qqStream.ts'
 import { setWechatBotHandlers, startWechatBot, stopWechatBot, stopAllWechatBots, sendWechatText, sendWechatMedia, sendWechatToolProgress, wechatBotStatus } from './channels/wechatBot.ts'
-import { setTaskRunner, setTaskSessionResolver, startScheduler, describeSchedule, normalizeNotifyTargets, setOwnSession, setExecSession, type TaskNotifyTarget } from './scheduledTasks.ts'
+import { listTasks, createTask, updateTask, removeTask, runTaskNow, getTaskOwnSessionIds, setTaskRunner, setTaskSessionResolver, startScheduler, describeSchedule, normalizeNotifyTargets, setOwnSession, setExecSession, type TaskNotifyTarget } from './scheduledTasks.ts'
 import { makeChannelKey, getLink, setLink, touchLink, removeLinkBySession, listLinks, setBotActive, getBotActive, clearBotActive, setContextToken, setKind } from './channels/sessionMap.ts'
 /** ★1014f：PC 会话接管的准入闸（配对码 + 白名单） */
 import { isPaired, tryPair, getPairCode, pcAccessFilePath } from './channels/pcAccess.ts'
@@ -673,7 +673,7 @@ import { labelFor, setPeerLabel, allPeerLabels } from './channels/peerLabels.ts'
 import { fetchQqGroupInfo } from './channels/qqBot.ts'
 // 0912 二十二批：联调投喂原始事件（平台字段灰度/变更时拿真实事件体本地回归）
 // 0912 十九批：定时任务「待回复通知」台账（/通知 · /回复通知）
-import { recordNotice, listNotices, markNoticeReplied } from './channels/notices.ts'
+import { recordNotice, listNotices, markNoticeReplied, clearNoticesByTask } from './channels/notices.ts'
 // 0912 二十一批：入站图片（QQ 图链下载 / 微信 CDN 解密后落盘）→ 附件喂给 agent（AI 能看图）
 import { type InboundImage, downloadImageUrl, fetchQqImages, INBOUND_IMAGE_MAX_COUNT } from './channels/imageIntake.ts'
 
@@ -13451,6 +13451,116 @@ function lastMessageBrief(s: any): string {
   return ''
 }
 
+/**
+ * 通知目标 key（`channel:botId:peerId`）→ 可读位置名（群名/私聊）
+ */
+function peerLabelFromKey(key: string): string {
+  const parts = String(key || '').split(':')
+  if (parts.length < 3) return key || ''
+  const channel = parts[0]
+  const botId = parts[1]
+  const peerId = parts.slice(2).join(':')
+  try { return labelFor(channel, botId, peerId) || peerId.slice(0, 8) } catch { return peerId.slice(0, 8) }
+}
+
+/**
+ * 任务的「支线清单」（0912 十九批）—— 供卡片上的「查看列表」直接渲染。
+ * 每条 = 一个通知位置（或无线程时的任务对话）对应的独立上下文。
+ */
+function taskBranches(task: any): Array<{
+  sessionId: string; key: string; label: string; title: string; lastMessage: string
+  updatedAt: number; inList: boolean; isExec: boolean; exists: boolean; running: boolean
+}> {
+  const exec = String(task?.execSessionId || '')
+  const entries: Array<[string, string]> = Object.entries(task?.ownSessions || {}).map(([k, v]) => [k, String(v || '')])
+  if (task?.ownSessionId) entries.push(['', String(task.ownSessionId)])
+  const seen = new Set<string>()
+  const out: any[] = []
+  for (const [key, sid] of entries) {
+    if (!sid || seen.has(sid)) continue
+    seen.add(sid)
+    const s = sessions.get(sid)
+    const last = (s?.messages?.[s.messages.length - 1]?.content || [])
+      .filter((c: any) => c?.type === 'text').map((c: any) => c.text).join(' ')
+    out.push({
+      sessionId: sid,
+      key,
+      label: key ? peerLabelFromKey(key) : '任务对话',
+      title: s?.title || '（已被删除）',
+      lastMessage: String(last || '').slice(0, 80),
+      updatedAt: s?.updatedAt || 0,
+      inList: s?.inMainList === true,
+      isExec: sid === exec,
+      exists: !!s,
+      running: s?.status === 'running',
+    })
+  }
+  // 执行会话排最前（它就是「在对话中查看」的默认落点）
+  out.sort((a, b) => (Number(b.isExec) - Number(a.isExec)) || (b.updatedAt - a.updatedAt))
+  return out
+}
+
+/**
+ * 已知的通道对端清单（0912 二十一批抽出）—— 「完成任务通知位置」与「转为通道对话」共用同一份口径。
+ *
+ * 为什么只有"聊过"的对端在列表里：推送/迁移都要求知道对端 id（QQ=openid / 微信=user_id），
+ * 而这个 id 只有对方先发过消息才拿得到；只配了机器人但没人聊过 → 无从列举。
+ */
+function enumerateChannelPeers(): any[] {
+  healSessionsFromLinks()
+  const links = listLinks()
+  const out: any[] = []
+  const seen = new Set<string>()
+  for (const v of Object.values(links)) {
+    if (!v?.channel || !v?.botId || !v?.peerId) continue
+    if (!['qq', 'wechat'].includes(v.channel)) continue
+    const key = `${v.channel}:${v.botId}:${v.peerId}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    const cfg: any = getChannel(v.channel)
+    const bot = (cfg?.bots || []).find((b: any) => b.id === v.botId)
+    const s = sessions.get(v.sessionId)
+    // kind 以**映射上的对端类型**为准（同一会话可能被多个对端复用，会话级字段会串味 → 发错端点）
+    const kind = v.kind || s?.originKind || ''
+    const kindLabel = kind === 'group' ? '群聊' : kind === 'channel' ? '频道' : '私聊'
+    /**
+     * 机器人显示名：配置里的昵称 → **运行时昵称**（QQ READY 事件下发的 Nis/牢大，配置里往往为空）
+     * → 兜底「QQ/微信」。二十一批修：之前只读配置，导致分节标题 fallback 成 bot_mtx… 这种 id。
+     */
+    const runtimeNick = v.channel === 'qq'
+      ? String(qqBotStatus()[v.botId]?.nickname || '').trim()
+      : String(cfg?.bots?.find((b: any) => b.id === v.botId)?.nickname || '').trim()
+    const botName = String(bot?.nickname || '').trim() || runtimeNick || (v.channel === 'wechat' ? '微信' : 'QQ')
+    /**
+     * 显示名（0912 十七批）：不用「群聊 · 60B6CC」这种看不懂的 id，
+     * 而是「群A / 群B / 私聊」—— 多群场景下一眼能对上号（可改名，见 channel.setPeerLabel）。
+     */
+    const peerLabel = labelFor(v.channel, v.botId, v.peerId, kind) || kindLabel
+    /**
+     * 二十一批：分组信息（用户要求「列表一类、微信一类、QQ机器人1一类…」）——
+     * 前端按 groupKey 分节渲染，groupLabel 直接当小标题（QQ · Nis / 微信）。
+     */
+    const groupKey = v.channel === 'wechat' ? 'wechat' : `qq:${v.botId}`
+    const groupLabel = v.channel === 'wechat' ? '微信' : `QQ · ${botName}`
+    out.push({
+      channel: v.channel,
+      botId: v.botId,
+      peerId: v.peerId,
+      kind,
+      botName,
+      peerLabel,
+      groupKey,
+      groupLabel,
+      label: v.channel === 'wechat' ? `微信 · ${peerLabel}` : `QQ · ${botName} · ${peerLabel}`,
+      lastAt: v.lastAt || 0,
+      /** QQ：被动回复窗口（5 分钟）内有入站消息 → 推送走被动回复，**不占每月 4 条额度** */
+      passiveWindow: v.channel === 'qq' ? qqPassiveWindowOpen(v) : undefined,
+    })
+  }
+  out.sort((a, b) => (b.lastAt || 0) - (a.lastAt || 0))
+  return out
+}
+
 async function dispatchMethod(method: string, payload: unknown): Promise<unknown> {
   const p = payload as Record<string, unknown>
   const sessionId = p?.sessionId as string | undefined
@@ -13460,7 +13570,7 @@ async function dispatchMethod(method: string, payload: unknown): Promise<unknown
       const cfg = currentLlmConfig()
       /* ★ 0927 第 0 批：暴露数据根来源 + 降级文件清单 —— "设置还原默认"类问题排查第一步
          就是确认"读的是哪个目录"；降级清单让前端/排查者一眼看到哪些存储处于损坏保护状态。 */
-      return { version: '1.1.3-pi-bridge', cwd: process.cwd(), provider: cfg.providerId, model: cfg.model, attachedSessions: sessions.size, canOpenPath: false, dataRoot: DATA_ROOT, dataRootFromEnv: !!process.env.NIS_DATA_DIR, degradedFiles: degradedFiles() }
+      return { version: '1.1.4-pi-bridge', cwd: process.cwd(), provider: cfg.providerId, model: cfg.model, attachedSessions: sessions.size, canOpenPath: false, dataRoot: DATA_ROOT, dataRootFromEnv: !!process.env.NIS_DATA_DIR, degradedFiles: degradedFiles() }
     }
 
     /* ── 0915：前端 UI 状态持久化（**替代 localStorage**）──
@@ -15245,6 +15355,95 @@ async function dispatchMethod(method: string, payload: unknown): Promise<unknown
       broadcastHost({ type: 'host/settings-updated', settings: JSON.parse(JSON.stringify(globalSettings)) })
       return { ok: true, settings: JSON.parse(JSON.stringify(globalSettings)) }
     }
+
+    /* ── 定时任务（0912 十二批）── */
+    case 'task.list': {
+      // 顺带带上每个任务的「支线清单」（0912 十九批）—— 卡片上的「查看列表」直接渲染它
+      return { tasks: listTasks().map(t => ({ ...t, branches: taskBranches(t) })) }
+    }
+
+    case 'task.create': {
+      const t = createTask({
+        name: p?.name, prompt: p?.prompt, targetSessionId: p?.targetSessionId,
+        schedule: p?.schedule, enabled: p?.enabled, notifyTargets: p?.notifyTargets,
+        modelMode: p?.modelMode, modelId: p?.modelId, modelProviderId: p?.modelProviderId, modelEffort: p?.modelEffort,
+      })
+      return { ok: true, task: t }
+    }
+
+    case 'task.update': {
+      const t = updateTask(String(p?.id || ''), {
+        name: typeof p?.name === 'string' ? p.name : undefined,
+        prompt: typeof p?.prompt === 'string' ? p.prompt : undefined,
+        targetSessionId: typeof p?.targetSessionId === 'string' ? p.targetSessionId : undefined,
+        schedule: p?.schedule,
+        enabled: typeof p?.enabled === 'boolean' ? p.enabled : undefined,
+        notifyTargets: Array.isArray(p?.notifyTargets) ? p.notifyTargets : undefined,
+        modelMode: p?.modelMode, modelId: p?.modelId, modelProviderId: p?.modelProviderId, modelEffort: p?.modelEffort,
+      })
+      if (!t) throw new Error('任务不存在')
+      return { ok: true, task: t }
+    }
+
+    /**
+     * 可选的「完成后通知」目标（0912 十三批）—— 只列**已经聊过**的通道对端。
+     *
+     * 为什么只列这些：推送必须知道对端 id（QQ=openid / 微信=user_id），
+     * 而这个 id 只有对方先发过消息才拿得到；只配了机器人但没聊过 → 无法主动推送。
+     */
+    case 'task.notifyTargets': {
+      const out = enumerateChannelPeers()
+      /**
+       * 「列表通知」位置（0912 十九批）：不属于任何 IM 账号，但也是一个独立的推送位置 ——
+       * 选了它 → 通知只落一条带 ⏰ 的支线在对话列表里等我（不打扰 IM、零额度消耗）。
+       * 放在最前面（它最常用、也最不挑条件）。
+       */
+      out.unshift({
+        channel: 'list',
+        botId: '',
+        peerId: '',
+        kind: 'list',
+        botName: '',
+        peerLabel: '列表通知',
+        groupKey: 'list',
+        groupLabel: '列表通知',
+        label: '列表通知',
+        lastAt: 0,
+      })
+      return { targets: out }
+    }
+
+    case 'task.remove': {
+      const tid = String(p?.id || '')
+      /**
+       * 删除任务 → **同步带走它的专属会话**（0912 十七批，用户要求）。
+       * 这些会话是任务自动建的（标题带 ⏰），任务没了就没人再引用它们 ——
+       * 留着只是垃圾，而且用户没法从别处删（故意：专属会话只能随任务一起删）。
+       */
+      const own = getTaskOwnSessionIds(tid)
+      if (!removeTask(tid)) throw new Error('任务不存在')
+      try { clearNoticesByTask(tid) } catch { /* 台账清理失败不影响删除 */ }
+      let removed = 0
+      for (const sid of own) {
+        try {
+          if (!sessions.has(sid)) continue
+          agents.get(sid)?.abort()
+          agents.delete(sid)
+          clearReplyTargets(sid)
+          clearInboundContext(sid)
+          removeLinkBySession(sid)
+          sessions.delete(sid)
+          broadcastHost({ type: 'host/session-removed', sessionId: sid })
+          removed += 1
+        } catch { /* 单个删除失败不影响整体 */ }
+      }
+      if (removed) { schedulePersist(); console.log(`[scheduledTasks] 删除任务同时清理 ${removed} 条专属会话`) }
+      return { ok: true, removedSessions: removed }
+    }
+
+    case 'task.runNow':
+      // 手动立即执行一次（不改变原排期）
+      return await runTaskNow(String(p?.id || ''))
 
     /**
      * 定时任务支线：放进 / 移出**主对话列表**（0912 十九批）。
@@ -17856,7 +18055,12 @@ async function dispatchMethod(method: string, payload: unknown): Promise<unknown
     }
 
     default:
-      console.log('[pi-bridge] unhandled method:', method)
+      /* ★1012：静默降级 = 事故源。1012 定时任务 UI「保存后仍为空」的根因就是：前端调
+         task.list/create/... 六个方法全落到这里，返回 ok:true ⇒ 前端当成功、弹窗照关、
+         实际零效果（排查花了整轮）。这里**保留兼容返回值**（不制造硬错误，避免打翻
+         未知的容错路径），但必须**可见**：日志升级为 warn 并写明"没有任何后端效果"，
+         前端 bridgeRpc 同步把它暴露到控制台（window.__nisUnhandledMethods 可查）。 */
+      console.warn(`[pi-bridge] ⚠ 未实现的方法（前端调了不存在的 RPC）: ${method} —— 本次调用没有任何后端效果`)
       return { ok: true, _unhandled: method }
   }
 }

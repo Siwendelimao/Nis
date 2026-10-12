@@ -397,6 +397,16 @@ export function setExecSession(taskId: string, sessionId: string): void {
 }
 
 
+/** 该任务名下的全部专属会话 id（删除任务时一并清理，避免留孤儿会话） */
+export function getTaskOwnSessionIds(taskId: string): string[] {
+  const t = load().tasks.find(x => x.id === taskId)
+  if (!t) return []
+  const out = Object.values(t.ownSessions || {}).filter(Boolean) as string[]
+  if (t.ownSessionId) out.push(t.ownSessionId)
+  if (t.execSessionId) out.push(t.execSessionId)
+  return Array.from(new Set(out))
+}
+
 export function removeTask(id: string): boolean {
   const data = load()
   const before = data.tasks.length

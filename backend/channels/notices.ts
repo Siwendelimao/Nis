@@ -117,3 +117,17 @@ export function markNoticeReplied(channel: string, botId: string, peerId: string
   schedulePersist()
 }
 
+/** 清空某任务的待回复通知台账（任务删除时顺手清理，不留死数据） */
+export function clearNoticesByTask(taskId: string): number {
+  const data = load()
+  let n = 0
+  for (const [k, arr] of Object.entries(data.peers)) {
+    const before = arr.length
+    data.peers[k] = arr.filter(x => x.taskId !== taskId)
+    n += before - data.peers[k].length
+    if (!data.peers[k].length) delete data.peers[k]
+  }
+  if (n) schedulePersist()
+  return n
+}
+
