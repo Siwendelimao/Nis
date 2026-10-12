@@ -1,0 +1,26 @@
+name: 功能建议
+description: 想要什么能力？说说你的使用场景
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: scene
+    attributes:
+      label: 你想解决什么问题
+      description: 说场景比说方案更有用（例如"每次都要手动整理下载目录"）
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: 你设想的做法（可选）
+      description: 有想法就写，没有也没关系
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: NIS 版本（可选）
+      placeholder: "1.1.3"
+    validations:
+      required: false

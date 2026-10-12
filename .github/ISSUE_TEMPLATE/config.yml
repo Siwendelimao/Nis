@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 提问 / 讨论（Discussions）
+    url: https://github.com/Siwendelimao/Nis/discussions
+    about: 安装、配置、模型接入这类问题，去 Discussions 更快
+  - name: 官网与更新日志
+    url: https://siwendelimao.github.io/Nis/
+    about: 下载最新安装包、看每个版本改了什么
