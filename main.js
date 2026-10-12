@@ -90,9 +90,8 @@
   }
   reloadShots()
 
-  /* —— 2. 主题切换（深色 / 浅色）—— */
+  /* —— 2. 主题切换（深色 / 浅色）—— 默认深色，用户手动切过才按他选的记 */
   var themeBtn = document.getElementById('themeToggle')
-  var scheme = window.matchMedia('(prefers-color-scheme: light)')
 
   function applyTheme(theme, persist) {
     root.setAttribute('data-theme', theme)
@@ -110,14 +109,8 @@
     })
   }
 
-  /* 用户没手动选过主题 → 跟随系统深浅切换 */
-  var userPicked = false
-  try { userPicked = !!localStorage.getItem('nis-theme') } catch (e) { /* ignore */ }
-  if (!userPicked) {
-    var onSchemeChange = function (e) { applyTheme(e.matches ? 'light' : 'dark', false) }
-    if (scheme.addEventListener) scheme.addEventListener('change', onSchemeChange)
-    else if (scheme.addListener) scheme.addListener(onSchemeChange)
-  }
+  /* ★1012（老大要求）：**默认深色** —— 不再跟随系统偏好。
+     手动点过切换按钮就按他选的记住（localStorage），没点过一律深色。 */
 
   /* —— 3. 滚动入场 —— */
   var reveals = document.querySelectorAll('[data-reveal]')

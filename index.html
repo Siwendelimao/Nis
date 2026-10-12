@@ -13,15 +13,13 @@
 <link rel="apple-touch-icon" href="assets/icon.png">
 <link rel="stylesheet" href="styles.css">
 <script>
-  /* 主题：localStorage → 系统偏好 → 默认深色。
+  /* 主题：localStorage → **默认深色**（不跟随系统偏好 —— 否则浅色系统的访客一进来看到浅版）。
      必须内联同步执行（早于首帧渲染），否则会先闪一下错的主题。 */
   (function () {
     var d = document.documentElement
     try {
       var t = localStorage.getItem('nis-theme')
-      if (t !== 'light' && t !== 'dark') {
-        t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
-      }
+      if (t !== 'light' && t !== 'dark') t = 'dark'
       d.setAttribute('data-theme', t)
     } catch (e) { /* 读不到就保持默认深色 */ }
     d.className = 'js'
