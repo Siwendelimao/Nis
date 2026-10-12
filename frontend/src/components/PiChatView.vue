@@ -1331,27 +1331,87 @@ function isThinkNode(n: any): boolean {
   if (n.reasoning) return true
   return n.status === 'streaming' && !String(n.text || '').trim()
 }
-/** ★1010：**过程节点**（进折叠段的节点）—— 'tools' 档只认工具；'all' 档把 Think 也算进来（"除正文外全折"）。 */
-function isProcNode(n: any): boolean {
+/** ★1012（老大需求·第二版，**只作用于 'all' 档**）：这段 assistant 文本是"过程插话"吗？
+ *  判据：组里**它后面还有别的非空正文段** ⇒ 插话（不是最终答复）。
+ *  ⚠️ 为什么"后面还有工具"不能当判据：收尾工具（project_note / 写文件…）常跟在**正文之后**，
+ *     按"有工具就算插话"会把正文一起折进去（就是那次"折大劲儿了"）。
+ *  ⚠️ 长度护栏：组内**最后一段正文 < 20 字**时判据不可靠（可能只是"✅"这类收尾）⇒
+ *     整轮**不折插话**（安全降级：宁可少折，绝不把正文折掉）。 */
+function isProcPreamble(n: any, g: any, ni: number): boolean {
+  if (!n || n.kind !== 'assistant') return false
+  if (!String(n.text || '').trim()) return false
+  const items = g?.items || []
+  /* 组内最后一段非空正文（倒序第一个命中的） */
+  let tail = ''
+  for (let i = items.length - 1; i >= 0; i--) {
+    const x = items[i]
+    if (x?.kind === 'assistant' && String(x.text || '').trim()) {
+      tail = String(x.text).trim()
+      break
+    }
+  }
+  if (tail.length < 20) return false
+  /* ★1012：**长段落不算插话** —— 实测（真实会话）插话普遍 28~85 字、正文 800~1600 字；
+     一轮里偶尔会连续说两段长文（"再说两句"），那种"正文级"长度的段落不该被折起来。
+     阈值取 150 字：超过就按答复处理（平铺），偏保守（宁可少折，也不误折正文内容）。 */
+  if (String(n.text).trim().length > 150) return false
+  /* 我后面还有别的正文段 ⇒ 我是插话 */
+  for (let i = ni + 1; i < items.length; i++) {
+    const x = items[i]
+    if (x?.kind === 'assistant' && String(x.text || '').trim()) return true
+  }
+  return false
+}
+/** ★1012：这段正文是"**本轮答复**"吗（＝有正文且不是插话）。
+ *  口径（'all' 档）：答复的**正文平铺在外面**，但它的 **Think 行照样收进过程段** ——
+ *  否则"答复自带的思考"会平铺露在折叠行外面（老大实测："还是有 think 露出来了"）。 */
+function isFinalAnswer(n: any, g: any, ni: number): boolean {
+  if (!n || n.kind !== 'assistant') return false
+  if (!String(n.text || '').trim()) return false
+  return !isProcPreamble(n, g, ni)
+}
+/** ★1010：**过程节点**（进折叠段的节点）—— 'tools' 档只认工具；'all' 档把 Think 也算进来（"除正文外全折"）；
+ *  'full' 档在模板里整档走平铺分支（这里不参与）。
+ *  ★1012 第二版（'all' 档专属）：**带正文的节点也进段** —— 这样它的 Think 行才会被收进折叠行。
+ *  它的**正文**由正文块渲染在外面（模板条件 `!inProcRun || isFinalAnswer`）⇒ **"正文被折"不可能发生**；
+ *  段内则按"插话/答复"分流渲染（见折叠行 slot：插话渲染正文、答复只渲染 Think）。
+ *  ⚠️ 非 'all' 档在第一行就返回了 ⇒ 'tools'/'full' 行为零变化。 */
+function isProcNode(n: any, g?: any, ni?: number): boolean {
   if (isToolNode(n)) return true
   if (procFoldMode.value !== 'all') return false
+  if (n?.kind === 'assistant' && String(n.text || '').trim()) {
+    if (typeof ni !== 'number') return false
+    /* 进行中：'all' 档整组平铺（flatWhileLive 接管），带正文节点不进段，交给正文块照常渲染 */
+    if (isLiveAiGroup(g)) return false
+    return true
+  }
   return isThinkNode(n)
+}
+/** ★1012（老大需求）：'全部折叠'档**回复过程中一律平铺**（连「我忙活了 N 步」这条折叠行都不出现），
+ *  等整轮结束才**一次性**收成折叠行 —— 过程中每一步都正常看得见，结束才收干净。 */
+function flatWhileLive(g: any): boolean {
+  return procFoldMode.value === 'all' && isLiveAiGroup(g)
+}
+/** ★1012：折叠行标题"步数"口径 = **工具 + 思考**（不含插话文本，否则"N 步"会被撑虚）。
+ *  对 'tools' 档无实际影响（那段的段内本来就只有工具）。 */
+function procRunSteps(nodes: any[]): number {
+  return nodes.filter((n: any) => n.kind === 'tool' || !!n.reasoning).length
 }
 /** 组内第 ni 个节点是否为"过程段起点"（在它前面插折叠行） */
 function isProcRunStart(g: any, ni: number): boolean {
   const items = g?.items || []
-  if (!isProcNode(items[ni])) return false
-  return ni === 0 || !isProcNode(items[ni - 1])
+  if (!isProcNode(items[ni], g, ni)) return false
+  return ni === 0 || !isProcNode(items[ni - 1], g, ni - 1)
 }
 /** 该节点属于过程段（本体交给折叠行渲染，这里跳过） */
 function inProcRun(g: any, ni: number): boolean {
-  return isProcNode((g?.items || [])[ni])
+  return isProcNode((g?.items || [])[ni], g, ni)
 }
 /** 从 ni 起连续的过程节点 */
 function procRunAt(g: any, ni: number): any[] {
   const items = g?.items || []
   const out: any[] = []
-  for (let i = ni; i < items.length && isProcNode(items[i]); i++) out.push(items[i])
+  for (let i = ni; i < items.length && isProcNode(items[i], g, i); i++) out.push(items[i])
   return out
 }
 function toolRunKey(g: any, ni: number): string {
@@ -1364,23 +1424,41 @@ function toolRunSettled(g: any, ni: number): boolean {
   return procRunAt(g, ni).every((n: any) => n.status !== 'streaming')
 }
 const toolRunUserState = ref<Record<string, boolean>>({})
-/** 用户没手动点过时：过程中展开（能看进度）、完成后折叠（回看干净）；
- *  ★ 'full' 档（完全展示）→ **永不自动折叠**，每条过程行照常平铺（该档下折叠行本就不渲染，这里是双保险）。 */
+/** ★1012（老大需求）：**本轮回复还在进行中**吗 —— 用会话级 `replying`（与 canManageUserMsg 同款判据）。 */
+const convReplying = computed(() => !!(conversationsStore.getById(String(props.convId)) as any)?.replying)
+/** 该组是不是"本轮正在回复的那一组"（viewGroups 里最后一个 AI 组）。只有它适用"整轮结束前不折"；
+ *  历史组不受影响（它们不是最后一组）—— 否则往上翻历史时会被正在进行的回复带着一起展开。 */
+function isLiveAiGroup(g: any): boolean {
+  if (!convReplying.value) return false
+  const gs = viewGroups.value as any[]
+  for (let i = gs.length - 1; i >= 0; i--) {
+    if (gs[i]?.type === 'ai') return gs[i] === g
+  }
+  return false
+}
+/** 用户没手动点过时：**本轮没结束就展开**（过程中不折、能看进度），整轮结束后折成一览；
+ *  ★ 'full' 档（完全展示）→ **永不自动折叠**，每条过程行照常平铺（该档下折叠行本就不渲染，这里是双保险）。
+ *  ★1012（老大实测，覆盖 0923 口径）：原来按"**段内**工具都跑完"就折 —— 一轮里多批工具时会闪：
+ *   第一批跑完折起 → 第二批到来又展开。现在改成按**整轮**判定：本轮回复结束才折。 */
 function toolRunOpen(g: any, key: string, ni: number): boolean {
   const explicit = toolRunUserState.value[key]
   if (explicit !== undefined) return explicit
   if (procFoldMode.value === 'full') return true
+  if (isLiveAiGroup(g)) return true
+  /* 兜底：组内还有流式节点（replying 尚未置位的那一拍、或外部流会话）也一律展开 */
+  if ((g?.items || []).some((n: any) => n?.status === 'streaming')) return true
   return !toolRunSettled(g, ni)
 }
 function toggleToolRun(key: string, g: any, ni: number): void {
-  const cur = toolRunUserState.value[key]
-  const now = cur !== undefined ? cur : !toolRunSettled(g, ni)
-  toolRunUserState.value = { ...toolRunUserState.value, [key]: !now }
+  /* ★1012：以 toolRunOpen 的**当前显示态**取反（原来各算各的 settled，'full' 档/过程中会反着来） */
+  toolRunUserState.value = { ...toolRunUserState.value, [key]: !toolRunOpen(g, key, ni) }
 }
 function toolRunSummary(nodes: any[]): string {
   const tools = nodes.filter((n: any) => n.kind === 'tool')
   const last = [...tools].reverse().find((n: any) => n.toolName)?.toolName || ''
-  const base = t('chat.procSummary', { n: nodes.length, tools: tools.length || nodes.length })
+  /* ★1012：步数口径 = 工具 + 思考（不含"过程插话"文本，否则"N 步"会被撑虚） */
+  const steps = procRunSteps(nodes)
+  const base = t('chat.procSummary', { n: steps, tools: tools.length || steps })
   return last ? base + ' · ' + t('chat.procLast', { x: last }) : base
 }
 /** ★ 0923（需求）：折叠行必须体现**调用异常** —— 统计段内工具的成功/失败数。
@@ -1574,7 +1652,9 @@ function toolRunLast(nodes: any[]): string {
                        **「我忙活了 N 步」这一行整行不出现** —— 过程行直接平铺（内容与折叠态 slot 一致）。
                        ★1010（需求）：升级为三档 —— 'tools' 只折工具（Think 不参与）、
                        'all' 连 Think 一起折（除正文外全折）、'full' 完全展示（走下面的平铺分支）。 -->
-                  <template v-if="isProcRunStart(g, ni) && procFoldMode !== 'full'">
+                  <!-- ★1012（老大需求）：'全部折叠'档**过程中一律平铺**（折叠行不出现），整轮结束才一次性收起来
+                       —— 所以这里多一个 !flatWhileLive(g)：进行中的那一组由下面的平铺分支接管。 -->
+                  <template v-if="isProcRunStart(g, ni) && procFoldMode !== 'full' && !flatWhileLive(g)">
                   <DisclosureRow
                     :title="toolRunSummary(procRunAt(g, ni))"
                     :open="toolRunOpen(g, toolRunKey(g, ni), ni)"
@@ -1585,14 +1665,15 @@ function toolRunLast(nodes: any[]): string {
                          全成功时退回原来的"（N 次工具）"文案，末尾保留"最后：xxx"。 -->
                     <template #title>
                       <template v-for="st in [toolRunStats(procRunAt(g, ni))]" :key="'st'">
-                        {{ t('chat.procSteps', { n: procRunAt(g, ni).length }) }}<template v-if="st.fail > 0">{{ t('chat.procStatsOk', { ok: st.ok }) }}<b class="proc-fail-note">{{ t('chat.procStatsFail', { fail: st.fail }) }}</b></template><template v-else-if="st.ok > 0">{{ t('chat.procTools', { tools: st.ok }) }}</template><template v-if="toolRunLast(procRunAt(g, ni))"> · {{ t('chat.procLast', { x: toolRunLast(procRunAt(g, ni)) }) }}</template>
+                        {{ t('chat.procSteps', { n: procRunSteps(procRunAt(g, ni)) }) }}<template v-if="st.fail > 0">{{ t('chat.procStatsOk', { ok: st.ok }) }}<b class="proc-fail-note">{{ t('chat.procStatsFail', { fail: st.fail }) }}</b></template><template v-else-if="st.ok > 0">{{ t('chat.procTools', { tools: st.ok }) }}</template><template v-if="toolRunLast(procRunAt(g, ni))"> · {{ t('chat.procLast', { x: toolRunLast(procRunAt(g, ni)) }) }}</template>
                       </template>
                     </template>
                     <template #icon>
                       <Wrench :size="14" stroke-width="1.5" :style="{ color: 'var(--dsw-alias-label-tertiary)' }" />
                     </template>
                     <div class="space-y-2">
-                      <template v-for="n2 in procRunAt(g, ni)" :key="n2.key">
+                      <!-- ★1012：带索引遍历 —— 段内第 n2i 个节点的**组内**索引 = ni + n2i（判"插话/答复"要用） -->
+                      <template v-for="(n2, n2i) in procRunAt(g, ni)" :key="n2.key">
                         <RetryNotice v-if="n2.kind === 'retry'" :node="n2" />
                         <ToolPartBlock
                           v-else-if="n2.kind === 'tool'"
@@ -1611,17 +1692,25 @@ function toolRunLast(nodes: any[]): string {
                           }"
                           :desc="n2.toolName || ''"
                         />
-                        <!-- ★1010（'all' 档）：Think 也在这个过程段里 —— 展开折叠行时按原样式显示 Think 行
-                             （'full'/'tools' 档下段内不会出现 assistant 节点，此分支不会命中，作兜底） -->
-                        <ReasoningBlock
-                          v-else-if="n2.kind === 'assistant'"
-                          :content="n2.reasoning"
-                          :streaming="n2.status === 'streaming' && !n2.reasoningDone"
-                          :idle-until="piChat.thinkIdleUntil"
-                          :start-time="n2.time"
-                          :elapsed-ms="n2.reasoningMs || 0"
-                          @elapsed="(ms: number) => { n2.reasoningMs = ms; saveThinkMs(String(props.convId || ''), n2.time, ms) }"
-                        />
+                        <!-- ★1010（'all' 档）：Think 也在这个过程段里 —— 展开折叠行时按原样式显示 Think 行。
+                             ★1012 第二版：**'all' 档的"过程插话"也在段内** ⇒ 这里一并渲染它的正文，
+                             否则折进去的插话展开后看不到（内容等于丢了）。 -->
+                        <template v-else-if="n2.kind === 'assistant'">
+                          <ReasoningBlock
+                            v-if="n2.reasoning || (n2.status === 'streaming' && !(n2.text || '').trim())"
+                            :content="n2.reasoning"
+                            :streaming="n2.status === 'streaming' && !n2.reasoningDone"
+                            :idle-until="piChat.thinkIdleUntil"
+                            :start-time="n2.time"
+                            :elapsed-ms="n2.reasoningMs || 0"
+                            @elapsed="(ms: number) => { n2.reasoningMs = ms; saveThinkMs(String(props.convId || ''), n2.time, ms) }"
+                          />
+                          <!-- 插话的正文在段内渲染；**答复的正文不在这里渲染**（留到外面平铺，见正文块） -->
+                          <div v-if="(n2.text || '').trim() && !isFinalAnswer(n2, g, ni + n2i)" class="msg-body text-[14px] leading-normal">
+                            <MarkdownText v-if="n2.status === 'done'" :text="n2.text" />
+                            <StreamingTail v-else :text="n2.text.replace(/\s+$/, '')" />
+                          </div>
+                        </template>
                       </template>
                     </div>
                   </DisclosureRow>
@@ -1701,8 +1790,11 @@ function toolRunLast(nodes: any[]): string {
                       <MarkdownText :text="errBody(n.text)" />
                     </div>
                   </div>
+                  <!-- ★1012：正文的渲染位置 —— **答复的正文永远在外面平铺**（`|| isFinalAnswer(...)`），
+                       折叠段里只渲染"插话"的正文 ⇒ 既不会重复渲染，也不会把答复折进去。
+                       （条款里的 !inProcRun 是给"插话"用的：它在段内渲染，外面这条就别再渲染一遍。） -->
                   <div
-                    v-else-if="n.kind === 'assistant' && (n.text || '').trim()"
+                    v-else-if="n.kind === 'assistant' && (n.text || '').trim() && (!inProcRun(g, ni) || isFinalAnswer(n, g, ni))"
                     class="msg-body text-[14px] leading-normal"
                   >
                     <MarkdownText v-if="n.status === 'done'" :text="n.text" />

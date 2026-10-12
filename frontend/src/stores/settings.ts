@@ -471,6 +471,19 @@ export const useSettingsStore = defineStore('settings', () => {
         /* ★0927 N1：按「停止」时队列的处置（甲 continue=继续按序发 / 乙 pause=按住队列）
            ⚠️ 同样的坑：不进这份 patch 白名单（+ 后端 settings.update 白名单）＝设置页怎么拨都不生效。 */
         cancelQueueMode: general.value.cancelQueueMode === 'pause' ? 'pause' : 'continue',
+        /* ★1012（老大实测：选「完全展示」→ 新装/导入数据后又变回「折叠工具」）：
+           外观这一整块此前**既不在前端这份 patch、后端 settings.get 又是扁平口径**（没有嵌套 appearance）
+           ⇒ 折叠档位/主题/字号这些**只写进了 localStorage**，换安装版或导入数据必丢（回落默认 'tools'）。
+           ⚠️ 口径：后端白名单是**扁平字段**（processFoldMode / themeMode / fontSize …）⇒ 必须逐字段发；
+           发 `appearance: {...}` 整块会被后端按白名单**忽略**。 */
+        themeMode: appearance.value.themeMode,
+        themeLightStart: appearance.value.themeLightStart,
+        themeLightEnd: appearance.value.themeLightEnd,
+        fontSize: appearance.value.fontSize,
+        bubbleAvatar: appearance.value.bubbleAvatar,
+        bubbleRadius: appearance.value.bubbleRadius,
+        processFoldMode: appearance.value.processFoldMode,
+        foldProcessOnDone: appearance.value.foldProcessOnDone,
       }
       // ★1012ah：**只发与基线不同的字段**；无变化就不发请求（少一次跨端互相覆盖的机会）
       const patch = diffAgainstBaseline(fullPatch)
@@ -551,6 +564,25 @@ export const useSettingsStore = defineStore('settings', () => {
       if (typeof s.bgWatchAutoWake === 'boolean') general.value.bgWatchAutoWake = s.bgWatchAutoWake
       if (typeof s.extPresetContext === 'boolean') general.value.extPresetContext = s.extPresetContext
       if (typeof s.fsReadMaxChars === 'number') general.value.fsReadMaxChars = s.fsReadMaxChars
+      /* ★1012（老大实测：选「完全展示」→ 新装/导入数据后又变回「折叠工具」）：
+         外观这一整块此前**两端都缺** —— 前端 pushToBackend 不发、这里也不回读，它只活在 localStorage
+         ⇒ 换安装版/导入数据必丢。现在按**后端扁平口径**回读；未定义就保留本地值，绝不用 undefined 抹掉。 */
+      {
+        const a: any = appearance.value
+        if (typeof s.themeMode === 'string' && s.themeMode) a.themeMode = s.themeMode
+        if (typeof s.themeLightStart === 'string') a.themeLightStart = s.themeLightStart
+        if (typeof s.themeLightEnd === 'string') a.themeLightEnd = s.themeLightEnd
+        if (s.fontSize) a.fontSize = s.fontSize
+        if (typeof s.bubbleAvatar === 'boolean') a.bubbleAvatar = s.bubbleAvatar
+        if (s.bubbleRadius) a.bubbleRadius = s.bubbleRadius
+        if (s.processFoldMode === 'full' || s.processFoldMode === 'tools' || s.processFoldMode === 'all') {
+          a.processFoldMode = s.processFoldMode
+          /* 旧布尔字段**双写**（只认布尔的老逻辑/老客户端行为也正确）：'full' ⇔ false，其余 ⇔ true */
+          a.foldProcessOnDone = s.processFoldMode !== 'full'
+        } else if (typeof s.foldProcessOnDone === 'boolean') {
+          a.foldProcessOnDone = s.foldProcessOnDone
+        }
+      }
       // 后端是权威：同步写回 localStorage 缓存，避免刷新后 load() 用旧值覆盖
       /* 0927 netfix A: the old if-changed gate only covered the first 4 fields; the 20+ fields below
          never marked changed => after refresh load() overwrote them with the stale localStorage cache
@@ -569,7 +601,10 @@ export const useSettingsStore = defineStore('settings', () => {
             notify: notify.value,
             persona: persona.value,
             general: general.value,
-            appearance: _prev.appearance ?? appearance.value,
+            /* ★1012：改成**合并**写 —— appearance.value 现在含刚从后端回读的权威字段（见上），
+               只取 _prev 会让"后端权威值"落不进本地缓存（刷新又被旧缓存盖回去）；
+               以 _prev 为底则同时保住 1010d 关心的"键别丢、旧值别被水合竞态抹掉"。 */
+            appearance: { ...(_prev.appearance || {}), ...appearance.value },
             envStates: envStates.value,
           }))
         } catch (e) { swallowed('设置同步后端失败（内层：本地已改、后端未生效）', e) }

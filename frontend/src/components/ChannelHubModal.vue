@@ -92,7 +92,16 @@ async function rotatePcCode() {
     if (r?.ok && r.code) pcCodes.value = { ...pcCodes.value, [b.id]: r.code }
   } catch (e) { swallowed('换 PC 接管码失败', e, 1) } finally { pcRotating.value = false }
 }
-watch(() => activeTab.value, loadPcCodes, { immediate: true })
+/* ★1012（修白屏隐患 —— 本机实测复现，尚未在老大那里触发）：
+   原先这里是 `watch(() => activeTab.value, loadPcCodes, { immediate: true })` ——
+   而 `activeTab` 要到本文件下方（`const activeTab = ref<ChannelId>('wechat')`，约 583 行）才创建。
+   `immediate: true` 会让回调在 **setup 阶段同步立刻求值 getter**，读到还没初始化的变量 ⇒
+   `ReferenceError: Cannot access 'activeTab' before initialization` ⇒ 组件 setup 抛错 ⇒ 挂载链断、全页白屏。
+   （复现方式：`watch(() => activeTab.value, fn, { immediate: true })` 写在 `const activeTab = ...` 之前，
+     Vue 会报 "Unhandled error during execution of watcher getter"。）
+   删掉 immediate 即可：首次加载由上方 `onMounted(loadPcCodes)` 负责，这里只管「切通道时重拉一次」；
+   顺带少一次重复请求（改之前 onMounted + immediate 会各拉一次）。 */
+watch(() => activeTab.value, loadPcCodes)
 
 /** 配置卡的作用对象：QQ=选中机器人；微信=唯一账号（没有则留空走通道级） */
 const cfgTarget = computed(() => {

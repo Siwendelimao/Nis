@@ -13460,7 +13460,7 @@ async function dispatchMethod(method: string, payload: unknown): Promise<unknown
       const cfg = currentLlmConfig()
       /* ★ 0927 第 0 批：暴露数据根来源 + 降级文件清单 —— "设置还原默认"类问题排查第一步
          就是确认"读的是哪个目录"；降级清单让前端/排查者一眼看到哪些存储处于损坏保护状态。 */
-      return { version: '1.1.2-pi-bridge', cwd: process.cwd(), provider: cfg.providerId, model: cfg.model, attachedSessions: sessions.size, canOpenPath: false, dataRoot: DATA_ROOT, dataRootFromEnv: !!process.env.NIS_DATA_DIR, degradedFiles: degradedFiles() }
+      return { version: '1.1.3-pi-bridge', cwd: process.cwd(), provider: cfg.providerId, model: cfg.model, attachedSessions: sessions.size, canOpenPath: false, dataRoot: DATA_ROOT, dataRootFromEnv: !!process.env.NIS_DATA_DIR, degradedFiles: degradedFiles() }
     }
 
     /* ── 0915：前端 UI 状态持久化（**替代 localStorage**）──
@@ -16068,6 +16068,20 @@ async function dispatchMethod(method: string, payload: unknown): Promise<unknown
             for (const k of ['storagePath', 'envDir'] as const) {
               if (localPaths[k]) st[k] = localPaths[k]
               else delete st[k]
+            }
+            /* ★1012：**外观字段在 settings.json 里也有一份了** —— 前端把外观接进了 settings 同步链
+               （pushToBackend 逐字段发 + 回读），于是 settings.json 被整份替换时这些字段也会跟着数据包变。
+               这里与 ui-state 的保护**同口径**：外观以本机为准（导入数据不该改"这台机器长什么样"，
+               即 0920 那条实测修复的本意："引导里选了深色 → 导入老数据 → 外观变成跟随系统"不许复发）。
+               ⚠️ **例外：折叠档位**（processFoldMode / foldProcessOnDone）**跟数据包走** ——
+                  老大明确要求"导出 → 导入后折叠设置要继承"；它属于"回复展示行为"，不是这台机器的样子。
+               ⚠️ 本机没设过某字段（localAppearance 里没有该键）⇒ 删掉包里那份、回到默认，
+                  与上面 storagePath/envDir 的处理同口径。 */
+            if (localAppearance) {
+              for (const k of ['themeMode', 'themeLightStart', 'themeLightEnd', 'fontSize', 'bubbleAvatar', 'bubbleRadius'] as const) {
+                if (k in localAppearance) st[k] = (localAppearance as any)[k]
+                else delete st[k]
+              }
             }
             fs.writeFileSync(sp, JSON.stringify(st, null, 2), 'utf8')
           } catch (e) { swallowed('导入后回写 settings.json 失败（本机 storagePath/envDir 等可能未生效）', e) }

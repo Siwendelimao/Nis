@@ -278,7 +278,9 @@ function askReset(c: { hash: string; short: string }) {
   confirmDialog.value = {
     title: t('git.resetAsk').replace('{s}', c.short),
     body: t('git.resetAskBody').replace('{n}', String(after)).replace('{d}', String(data.value?.dirty || 0))
-      + (after > 0 ? `\n\n${t('git.resetAskNote')}` : ''),
+      /* ★1012：判据放开后，"HEAD 正好是目标 + 工作区脏"（after=0）也会走丢改动的危险路径 ⇒
+         这种场合同样要把"会先备份"的定心丸显示出来，别只在真有提交要移出时才提示。 */
+      + ((after > 0 || (data.value?.dirty || 0) > 0) ? `\n\n${t('git.resetAskNote')}` : ''),
     okText: t('git.resetYes'),
     run: () => { confirmDialog.value = null; void doReset(c) },
   }
@@ -355,6 +357,8 @@ async function doReset(c: { hash: string }) {
     } else if (r?.ok) {
       const parts = [t('git.resetOk').replace('{tag}', String(r.backup || '')).replace('{n}', String(r.moved ?? 0))]
       if (r.discarded) parts.push(t('git.resetDiscarded').replace('{n}', String(r.discarded)))
+      /* ★1012：未跟踪新文件 `reset --hard` **不会删** —— 单独如实报，别混进"丢弃"里（原先会虚报） */
+      if (r.untrackedKept) parts.push(t('git.resetUntrackedKept').replace('{n}', String(r.untrackedKept)))
       opMsg.value = { ok: true, text: parts.join(' · ') }
     } else {
       opMsg.value = { ok: false, text: String(r?.error || t('git.resetFail')) }

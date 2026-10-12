@@ -206,8 +206,12 @@ interface GitResetResult {
   backup?: string
   /** 被移出当前历史的提交数 */
   moved?: number
-  /** 一并丢弃的未提交改动数（含未跟踪文件） */
+  /** 被丢弃的**已跟踪**未提交改动数（= `reset --hard` 的实际影响面） */
   discarded?: number
+  /** 留在工作区没动的**未跟踪新文件**数（`reset --hard` **不删**它们 ⇒ 不算"丢弃"，单独报） */
+  untrackedKept?: number
+  /** 工作区改动是否已先备份进 stash（**真后悔药**：`git stash list` 可见，`git stash pop` 取回） */
+  stashed?: boolean
   error?: string
 }
 
@@ -215,7 +219,9 @@ interface GitResetResult {
  * 「回到这个存档点」：把工作区 + 历史一起回到某条提交的状态（= git reset --hard）。
  * ⚠️ 这是**危险**操作（之后的提交会移出历史、未提交改动会丢）⇒ 因此：
  *   ① **先自动打备份标签**，打不上就**直接中止**（没有后悔药就不做危险操作）；
- *   ② 把"移出几条 / 丢了多少未提交改动"如实回给前端展示，不静默。
+ *   ② ★1012：标签只钉住**提交历史**，救不回被丢掉的**工作区改动** ⇒ 动工作区之前，
+ *      先把已跟踪改动**存进 stash**（真后悔药）；stash 失败同样中止。
+ *   ③ 把"移出几条 / 丢了多少已跟踪改动 / 留了几个新文件"**如实**回前端展示：不静默、不虚报。
  */
 export async function resetToCommit(cwd: string, hash: string): Promise<GitResetResult> {
   const wd = String(cwd || '').trim()
@@ -224,10 +230,24 @@ export async function resetToCommit(cwd: string, hash: string): Promise<GitReset
   if (!/^[0-9a-f]{7,40}$/i.test(h)) return { ok: false, error: '提交号看着不对：' + h.slice(0, 40) }
   try {
     const head = (await run(wd, ['rev-parse', 'HEAD'])).trim()
-    if (head.toLowerCase().startsWith(h.toLowerCase())) return { ok: false, error: '已经在这个提交上了，不用回' }
-    const moved = Number((await run(wd, ['rev-list', '--count', `${h}..HEAD`]).catch(() => '0')).trim()) || 0
+    /* ⚠️ 工作区状态要**先**取（下面的判据要用）。
+       口径（★1012 拆清，别再混着报）：`-uall` 的行分两类 ——
+         · 不以 `??` 开头 = **已跟踪**文件的改动 ⇒ reset --hard 会真丢 ⇒ 报 `discarded`
+         · `??` 开头      = **未跟踪**新文件   ⇒ reset --hard **不删**它们 ⇒ 单独报 `untrackedKept` */
     const dirtyOut = await run(wd, ['status', '--porcelain', '-uall']).catch(() => '')
-    const discarded = dirtyOut.trim() ? dirtyOut.trim().split('\n').length : 0
+    const dirtyLines = dirtyOut.trim() ? dirtyOut.trim().split('\n') : []
+    const trackedDirty = dirtyLines.filter(l => !l.startsWith('??')).length
+    const untrackedKept = dirtyLines.length - trackedDirty
+    /* ★1012 修（老大实测）：原先只比 HEAD —— 只要目标提交正好是当前 HEAD 就**一律**拒绝，
+       于是"HEAD 就在这个提交 + 工作区还有未提交改动"这种**最需要它干活**的场景被挡回去了：
+       点回溯只弹「已经在这个提交上了，不用回」，工作区纹丝没动。
+       正确判据：HEAD 相同**且工作区也干净**才真叫"不用回"；HEAD 相同但工作区脏 ⇒ 继续往下走
+       （打备份标签 + reset --hard，此时 moved=0），把**工作区**拉回这个提交的状态。 */
+    if (head.toLowerCase().startsWith(h.toLowerCase()) && dirtyLines.length === 0) {
+      return { ok: false, error: '已经在这个提交上了，工作区也是干净的，不用回' }
+    }
+    const moved = Number((await run(wd, ['rev-list', '--count', `${h}..HEAD`]).catch(() => '0')).trim()) || 0
+    const discarded = trackedDirty
 
     const t = new Date()
     const p = (n: number) => String(n).padStart(2, '0')
@@ -236,8 +256,28 @@ export async function resetToCommit(cwd: string, hash: string): Promise<GitReset
     try { await run(wd, ['tag', tag, 'HEAD']) } catch { tagged = false }
     if (!tagged) return { ok: false, error: '备份标签没打成功，为安全已中止（没有备份就不做危险操作）' }
 
-    await run(wd, ['reset', '--hard', h])
-    return { ok: true, backup: tag, moved, discarded }
+    /* ★1012 ②：备份标签只钉住**提交历史**，救不回被丢的**工作区改动** ⇒ 动工作区之前，
+       先把**已跟踪改动**存进 stash（真后悔药：`git stash list` 可见、`git stash pop` 取回）。
+       ⚠️ 不带 `-u`：未跟踪新文件 reset --hard 本来就不删，没必要搬进 stash（搬了反而更难找）。
+       ⚠️ stash 失败（索引被锁 / 正处于 merge、rebase 等状态）⇒ 中止，不做"没有后悔药"的破坏。 */
+    let stashed = false
+    if (trackedDirty > 0) {
+      try {
+        await run(wd, ['stash', 'push', '-m', `nis-reset-backup ${tag}`])
+        stashed = true
+      } catch (e: any) {
+        return { ok: false, error: '工作区改动备份失败，为安全已中止：' + String(e?.message || e).slice(0, 200) }
+      }
+    }
+
+    try {
+      await run(wd, ['reset', '--hard', h])
+    } catch (e: any) {
+      /* 回溯没成：把刚备份的改动**原样放回工作区**，不留半成品状态（与 revert 的冲突回滚同套路） */
+      if (stashed) await run(wd, ['stash', 'pop']).catch(() => '')
+      return { ok: false, error: '回溯失败（工作区改动已放回）：' + String(e?.message || e).slice(0, 300) }
+    }
+    return { ok: true, backup: tag, moved, discarded, untrackedKept, stashed }
   } catch (e: any) {
     return { ok: false, error: String(e?.message || e).slice(0, 400) }
   }
