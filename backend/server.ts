@@ -11883,6 +11883,29 @@ function saveTunnelCfg(cfg: TunnelCfg): void {
     console.warn('[tunnel] 保存配置失败：', e?.message || e)
   }
 }
+/** ★1012（实测：换机/导入来的 tunnel_key 一律连不上）—— OpenSSH **拒绝使用权限过宽的私钥**。
+ *  实测证据（2026-10-12，安装版 `D:\NIS`）：
+ *    · 同一把钥匙（md5 完全一致）：dev 侧 `ssh -i` 直连 ✅ `NIS_KEY_OK`；
+ *      安装版侧 ❌ `Load key "...tunnel_key": bad permissions` → 面板显示 `Permission denied (publickey,password)`
+ *      （看着像"钥匙不对"，其实钥匙内容分毫不差）。
+ *    · 差异全在 ACL：dev 私钥 = 无继承 + 仅 Administrators / SYSTEM / 本用户；
+ *      **拷贝或数据包导入**来的私钥 = 继承目标目录的 ACL（Authenticated Users:(M)、Users:(RX)）⇒ ssh 判"他人可读"直接拒用。
+ *  ⇒ 在**每次用钥匙前**幂等地收紧一次（新建的、拷贝来的、导入的一视同仁）。
+ *  只在 Windows 做；失败**不抛** —— 让 ssh 自己如实报 bad permissions（问题照样暴露，不静默兜底）。 */
+let tunnelKeyAclDone = false
+function hardenTunnelKeyAcl(k: string): void {
+  if (tunnelKeyAclDone || process.platform !== 'win32') return
+  tunnelKeyAclDone = true
+  try {
+    const comp = process.env.COMPUTERNAME || ''
+    const user = process.env.USERNAME || 'Administrator'
+    const args = [k, '/inheritance:r',
+      '/grant:r', 'BUILTIN\\Administrators:(F)',
+      '/grant:r', 'NT AUTHORITY\\SYSTEM:(F)',
+      ...(comp ? ['/grant:r', `${comp}\\${user}:(M)`] : [])]
+    spawnSync('icacls', args, { encoding: 'utf8', windowsHide: true })
+  } catch { /* 收紧失败不阻断：ssh 会照常报错 */ }
+}
 /** 确保有专用密钥对（不复用用户 ~/.ssh 里的 —— 那把可能是他别的用途，别混） */
 function ensureTunnelKey(): string {
   const k = tunnelKeyPath()
@@ -11892,6 +11915,7 @@ function ensureTunnelKey(): string {
       throw new Error('生成密钥失败（系统缺 ssh-keygen？）：' + (r.error?.message || r.stderr || 'unknown'))
     }
   }
+  hardenTunnelKeyAcl(k)
   return k
 }
 function tunnelPubKey(): string {
@@ -13436,7 +13460,7 @@ async function dispatchMethod(method: string, payload: unknown): Promise<unknown
       const cfg = currentLlmConfig()
       /* ★ 0927 第 0 批：暴露数据根来源 + 降级文件清单 —— "设置还原默认"类问题排查第一步
          就是确认"读的是哪个目录"；降级清单让前端/排查者一眼看到哪些存储处于损坏保护状态。 */
-      return { version: '1.1.0-pi-bridge', cwd: process.cwd(), provider: cfg.providerId, model: cfg.model, attachedSessions: sessions.size, canOpenPath: false, dataRoot: DATA_ROOT, dataRootFromEnv: !!process.env.NIS_DATA_DIR, degradedFiles: degradedFiles() }
+      return { version: '1.1.2-pi-bridge', cwd: process.cwd(), provider: cfg.providerId, model: cfg.model, attachedSessions: sessions.size, canOpenPath: false, dataRoot: DATA_ROOT, dataRootFromEnv: !!process.env.NIS_DATA_DIR, degradedFiles: degradedFiles() }
     }
 
     /* ── 0915：前端 UI 状态持久化（**替代 localStorage**）──

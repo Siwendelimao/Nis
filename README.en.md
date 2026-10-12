@@ -4,7 +4,7 @@
 
 > **A local-first AI workbench running on your own machine** — long-term memory, knowledge base and a full toolchain. Desktop, mobile web, and optional QQ / WeChat bots.
 
-NIS (pronounced "nice") is not just another chat box. It brings together three things most AI clients lack: **it remembers you, it actually does the work, and you can reach it from anywhere.**
+NIS (Chinese: 纽斯) is not just another chat box. It brings together three things most AI clients lack: **it remembers you, it actually does the work, and you can reach it from anywhere.**
 
 - 🧠 **Long-term memory + knowledge base** — a four-layer memory architecture turns conversations, documents and projects into searchable long-term context (no more re-explaining yourself every session)
 - 🛠 **An agent that actually does things** — file read/write, shell commands, browser automation, scheduled tasks and parallel sub-agents, with permission tiers and file history (rollback included)

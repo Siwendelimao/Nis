@@ -292,8 +292,18 @@ function modelTokensLine(mid: string): string {
 
 /* 悬停状态 */
 const hover = ref<Record<string, boolean>>({})
+/* ★1012（老大实测：鼠标移向右侧明细气泡时整组"当场消失"、根本划不过去）：
+   关闭加 220ms 宽限期 —— 跨过空隙的时间足够，且进入明细浮层会把它取消。
+   打开仍立即生效（不给延迟，避免迟钝感）。 */
+const hoverOffTimers: Record<string, ReturnType<typeof setTimeout>> = {}
 function onHover(key: string, v: boolean) {
-  hover.value[key] = v
+  const pending = hoverOffTimers[key]
+  if (pending) { clearTimeout(pending); delete hoverOffTimers[key] }
+  if (v) { hover.value[key] = true; return }
+  hoverOffTimers[key] = setTimeout(() => {
+    hover.value[key] = false
+    delete hoverOffTimers[key]
+  }, 220)
 }
 /* ★ 0920（反馈）：上下文气泡内的逐工具明细 —— 原先是在弹窗**内部**展开（撑开弹窗、
    还会被 `.ctx-rows` 的 overflow 裁掉）；现改成悬停在父行时从**行右侧**弹一个独立小气泡。
@@ -311,7 +321,10 @@ function showSubPop(seg: { key: string; color: string }, ev: MouseEvent): void {
   if (subHideTimer) { clearTimeout(subHideTimer); subHideTimer = null }
   const r = el.getBoundingClientRect()
   const W = 236
-  const H = Math.min(320, 22 + list.length * 20)
+  /* ★1012：高度估算改成按**真实行高 30px** 算（旧代码写 20px，十几条明细时低估一半 ⇒ 钳制失效 ⇒ 底部被裁）。
+     刻意保持"同步计算"：不查 DOM、不等 nextTick —— 上一版我在这里用了异步量高，实测出现"明细整个不弹"的回归，
+     宁可稍微保守地上移，也不要异步测量带来的意外；极端放不下由 `.ctx-subs-pop` 的 max-height 兜底。 */
+  const H = Math.min(360, 34 + list.length * 30)
   let x = r.right + 8
   if (x + W > window.innerWidth - 12) x = Math.max(8, r.left - 8 - W)
   let y = r.top
@@ -323,6 +336,18 @@ function showSubPop(seg: { key: string; color: string }, ev: MouseEvent): void {
 function hideSubPopSoon(): void {
   if (subHideTimer) clearTimeout(subHideTimer)
   subHideTimer = setTimeout(() => { subPop.value = { ...subPop.value, key: '' } }, 140)
+}
+
+/** ★1012：鼠标进入明细浮层 → 取消所有"即将收起"的计时，并把主气泡也留住。
+    （明细是 Teleport 出去的 fixed 独立浮层，鼠标从胶囊移到它上面必然先离开胶囊；
+      不留住的话就是老大看到的现象：整组当场消失、明细根本划不过去。） */
+function keepSubPop(): void {
+  if (subHideTimer) { clearTimeout(subHideTimer); subHideTimer = null }
+  for (const k of Object.keys(hoverOffTimers)) {
+    clearTimeout(hoverOffTimers[k])
+    delete hoverOffTimers[k]
+  }
+  if (!hover.value.ctx) hover.value.ctx = true
 }
 
 function hasSub(key: string): boolean {
@@ -537,6 +562,8 @@ onBeforeUnmount(stopRoll)
               v-if="subPop.key"
               class="ctx-subs-pop"
               :style="{ left: subPop.x + 'px', top: subPop.y + 'px' }"
+              @mouseenter="keepSubPop()"
+              @mouseleave="hideSubPopSoon()"
             >
               <div v-for="d in subPop.list" :key="d.key" class="ctx-row ctx-row-sub">
                 <dt>
@@ -1033,6 +1060,10 @@ html.dark .stats-roll-dot.is-on { background: rgba(255, 255, 255, 0.62); }
   /* ★ 0920：悬停父行时右侧弹出的明细气泡（fixed，left/top 由 showSubPop 算）。
      宽度/高度都设上限：明细十几条时自己内部滚动，不撑破屏幕。 */
   position: fixed;
+  /* ★1012：再加一道硬保险 —— 万一 JS 钳制没算准（屏幕特别矮等情况），
+     也绝不许它超出视口：超出就自己内部滚动。 */
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
   z-index: 10050;
   min-width: 176px;
   max-width: 260px;

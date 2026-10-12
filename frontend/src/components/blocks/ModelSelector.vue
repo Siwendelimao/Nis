@@ -20,6 +20,11 @@ const props = withDefaults(defineProps<{
   showEffort?: boolean
   /** 选中模型时是否同步全局当前供应商（默认 true；成员选择器不应改全局状态传 false） */
   syncGlobal?: boolean
+  /** ★1012u：当前模型的**权威归属供应商** id（会话级覆盖的 provider，或后端 providerActive）。
+   *  为什么要它：多个供应商可能有同名模型（实测：商汤 与 tokenrhythm 都有 deepseek-flash），
+   *  只按模型 id 在启用供应商里"谁先有就用谁"，会把图标/名称显示成另一家（显示与实际调用不一致）。
+   *  传了它就按它解析；没传（老调用方/成员选择器等）保持原来的扫描行为。 */
+  vendorId?: string
 }>(), {
   // Boolean prop 缺席时 Vue 会解析为 false（不是 undefined），必须显式给默认 true，
   // 否则主界面（不传这两个 prop）会误判为"成员模式"：强度角标不渲染、选模型不同步供应商
@@ -49,6 +54,18 @@ function modelsOf(providerId: string) {
   // 显示该供应商所有启用模型（含图片/视频，用于 /imagine 生成；聊天模型由后端按 text 能力拦截）
   return (providersStore.models[providerId] || []).filter(m => m.enabled)
 }
+
+/** ★1012u：**权威归属供应商** —— props.vendorId（会话覆盖的 provider / 后端 providerActive）指到谁就是谁。
+ *  注意这里刻意**不要求"该供应商在启用清单里"**：会话可能停在某个刚被停用的供应商上，
+ *  此时仍要如实显示那家的图标（显示口径 = 实际归属），而不是转手拿别家的。
+ *  ⚠️ 位置有讲究：必须声明在**所有用它的人之前**（currentEffortLevels 等）。
+ *  第一次是放在它们后面，setup 阶段就被求值 ⇒ `ReferenceError: Cannot access 'on' before initialization`
+ *  （TDZ），整块模型选择器渲染不出来（老大实测：选择器直接消失）。 */
+const authoritativeVendor = computed<ProviderItem | null>(() => {
+  const vid = String(props.vendorId || '').trim()
+  if (!vid) return null
+  return providersStore.providers.find(p => p.id === vid) || null
+})
 
 const currentModel = computed({
   get: () => props.modelValue || '',
@@ -96,6 +113,12 @@ const effortRingStyle = computed(() => {
 const currentEffortLevels = computed<string[]>(() => {
   const id = currentModel.value || ''
   if (!id) return ['fast', 'deep', 'heavy'] // 未选模型：编辑态用标准三挡（选完模型即重钳）
+  /* ★1012u：先认权威归属供应商（同名模型撞车时，挡位清单也得按**实际那家**算 —— 不同网关档位不同） */
+  const av = authoritativeVendor.value
+  if (av) {
+    const lv = providersStore.modelEfforts(av.id, id)
+    if (lv && lv.length) return lv
+  }
   const vendor = enabledVendors.value.find(v => modelsOf(v.id).some(m => m.id === id))
   if (vendor) return providersStore.modelEfforts(vendor.id, id)
   // 模型不在任何启用供应商表里（旧数据/手输 id）：正则兜底判推理，命中=标准三挡
@@ -109,7 +132,9 @@ const hasEffort = computed(() => props.showEffort !== false && isReasoningModel.
 watch(currentEffortLevels, (lv) => {
   if (!lv.length) return
   if (!lv.includes(currentEffort.value)) {
-    const vid = enabledVendors.value.find(v => modelsOf(v.id).some(m => m.id === currentModel.value))?.id || providersStore.providerActive
+    const vid = authoritativeVendor.value?.id
+      || enabledVendors.value.find(v => modelsOf(v.id).some(m => m.id === currentModel.value))?.id
+      || providersStore.providerActive
     const clamped = providersStore.clampEffortFor(vid, currentModel.value, currentEffort.value)
     if (clamped) currentEffort.value = clamped
   }
@@ -120,6 +145,15 @@ watch(currentEffortLevels, (lv) => {
 const current = computed(() => {
   if (props.allowEmpty && !currentModel.value) {
     return { name: props.emptyLabel || t('model.followSession'), logo: '/nis-logo2.png' }
+  }
+  /* ★1012u（老大实测："选的是 tokenrhythm 的 deepseek-flash，图标显示的却是商汤"）：
+     下面那圈"遍历启用供应商、谁先有同名模型就用谁"是**按 id 猜归属** —— 多家有同名模型时必然撞车。
+     既然父组件把权威 vendorId 传进来了，就先按它解析（名字取该家的模型名，图标取该家 logo）。 */
+  const av = authoritativeVendor.value
+  if (av) {
+    const mm = (providersStore.models[av.id] || []).find(m => m.id === currentModel.value)
+    if (mm) return { name: mm.name, logo: av.logo }
+    if (currentModel.value) return { name: currentModel.value, logo: av.logo }
   }
   for (const p of enabledVendors.value) {
     const mm = (providersStore.models[p.id] || []).find(m => m.id === currentModel.value)
@@ -440,6 +474,9 @@ function setItemRef(el: any, index: number) {
 function selectModel(id: string) {
   // 同步当前供应商（模型归属的厂商）；syncGlobal=false（成员选择器）不改全局供应商状态
   let vendorId = selectedVendor.value
+  /* ★1012u：selectedVendor 为空时，若选的正是**当前模型**（多半是刷新显示/程序化同步，不是在某个厂商列表里点的），
+     先认权威归属 —— 否则下面那圈扫描在同名模型上会猜到别家，而这个 vendorId 会被父组件写进会话（= 真调到别家）。 */
+  if (!vendorId && id && id === currentModel.value) vendorId = authoritativeVendor.value?.id || ''
   if (!vendorId) {
     const vendor = enabledVendors.value.find(v => modelsOf(v.id).some(m => m.id === id))
     if (vendor) vendorId = vendor.id

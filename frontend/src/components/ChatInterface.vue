@@ -1575,6 +1575,20 @@ const selectedModel = computed({
     console.warn('[model] 选择的模型不在就绪供应商表，会话覆盖未写入（★1012r 起也不再改全局）:', v)
   },
 })
+/** ★1012u：当前模型的**权威归属供应商** —— 传给 ModelSelector 解析图标/名称/推理挡位。
+ *  优先级：本会话的模型覆盖 provider > 后端 providerActive（全局）。
+ *  为什么必须由父组件喂进去：多家供应商可能有**同名模型**（实测：商汤 与 tokenrhythm 都有 deepseek-flash），
+ *  组件只拿到 model_id 时只能"扫一遍启用供应商、谁先有就用谁" ⇒ 显示成别家（图标与来源不符，用户实测反馈）。
+ *  注意滤掉 'external'（外部预设的占位供应商）——它不在 NIS 供应商表里，交给组件走原有回退。 */
+const modelVendorId = computed(() => {
+  const convId = props.conversation?.id
+  if (convId != null) {
+    const cm = providersStore.getConvModel(String(convId))
+    if (cm?.provider && cm.provider !== 'external') return cm.provider
+  }
+  return providersStore.activeProvider?.id || ''
+})
+
 /** 0908 二批条1：用户点选信号（ModelSelector @change，带归属供应商）→ 直接写会话覆盖，
  *  不再依赖 setter 遍历 enabledProviders 猜归属（isProviderReady 过滤/供应商刚新增都会猜不到）。
  *  后端已配套：供应商没注册自动注册、缺 Key 明确报错——不存在"悄悄用旧模型"。 */
@@ -1870,6 +1884,19 @@ const rightDocksWidth = computed(() => {
   const cap = Math.round(winW.value * 0.35)
   return `${Math.min(n, cap)}px`
 })
+/* ★1012（老大反馈"打开三个右栏，右侧栏挤压变形"）：右栏改为**互斥** —— 同时只允许开一个，
+   打开新的自动关掉旧的（再点同一个 = 收起）。
+   原因：三个面板各自首选 300px（合计 900px）永远塞不进"不挤死主视图"的可用宽度
+   （窗口宽 − 主视图保底 380px），原逻辑只能把每个等比压到 ~168px，内容全变形；
+   互斥后单面板恒为首选宽 300px 完整显示，主视图也永远宽敞。 */
+type DockKey = 'runlog' | 'workspace' | 'version'
+function toggleDock(which: DockKey) {
+  const cur = which === 'runlog' ? runLogOpen : which === 'workspace' ? workspaceOpen : versionOpen
+  const willOpen = !cur.value
+  runLogOpen.value = willOpen && which === 'runlog'
+  workspaceOpen.value = willOpen && which === 'workspace'
+  versionOpen.value = willOpen && which === 'version'
+}
 /** 极窄窗口保险丝（0904③，随固定宽上调阈值）：面板固定合计 680 + 左列保底 380 = 1060，
  *  窗口 <1080px 时双栏同开会挤压主视图，故整栏收起（单开 380/300 时不影响）。
  *  手机端规划里此宽度档会改 overlay 抽屉，届时替换本逻辑（预留见 right-docks 包装层注释）。 */
@@ -3578,9 +3605,9 @@ async function copySessionId() {
         :run-log-open="runLogOpen"
         :workspace-open="workspaceOpen"
         :version-open="versionOpen"
-        @toggle-run-log="runLogOpen = !runLogOpen"
-        @toggle-workspace="workspaceOpen = !workspaceOpen"
-        @toggle-version="versionOpen = !versionOpen"
+        @toggle-run-log="toggleDock('runlog')"
+        @toggle-workspace="toggleDock('workspace')"
+        @toggle-version="toggleDock('version')"
       />
 
     <!-- 浏览器视图（固定 tab�?0s 未使用自动释放） -->
@@ -3809,7 +3836,7 @@ async function copySessionId() {
      key 就变、组件整只重挂，弹层/强度卡交互状态（isOpen/effortOpen）全被销毁 ⇒ 选完模型强度卡永远弹不出来、
      强度卡一拨就闪关。显示刷新由响应式链保证（currentEffort 直读 conversationsStore，见 ModelSelector 续㊾ 注释）。 -->
 <template v-if="!externalOwnModels">
-      <ModelSelector v-model="selectedModel" v-model:effort="reasoningMode" @change="onModelPick" />
+      <ModelSelector v-model="selectedModel" v-model:effort="reasoningMode" :vendor-id="modelVendorId" @change="onModelPick" />
     </template>
     <!-- ★1001 外部预设 own 档：模型下拉=它家模型清单（MiniSelect 自家样式/深色适配） -->
     <MiniSelect v-else :model-value="selectedModel"
@@ -4132,7 +4159,7 @@ async function copySessionId() {
           <div class="flex items-center space-x-3">
             <!-- ★0926：同空态那处——:key 不得绑 selectedModel/reasoningMode（重挂会杀掉强度卡交互，见空态处注释） -->
             <template v-if="!externalOwnModels">
-              <ModelSelector v-model="selectedModel" v-model:effort="reasoningMode" @change="onModelPick" />
+              <ModelSelector v-model="selectedModel" v-model:effort="reasoningMode" :vendor-id="modelVendorId" @change="onModelPick" />
             </template>
             <!-- ★1001 外部预设 own 档：模型下拉=它家模型清单（MiniSelect 自家样式/深色适配） -->
             <MiniSelect v-else :model-value="selectedModel"
@@ -4215,9 +4242,14 @@ async function copySessionId() {
          包装层宽=打开组合的自然合计（不再随窗口等比压缩，见 rightDocksWidth）；主视图由左列 flex-1 吃剩余空间。
          <1080px 保险丝整栏收起（保底左列 380 + 双栏合计 680 不溢出）。动画在包装层 width 过渡（面板自身不挂 Transition）。══ -->
     <div class="right-docks flex shrink-0 overflow-hidden transition-[width] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]" :style="{ width: rightDocksWidth }">
-      <RunLogPanel v-if="runLogOpen" :open="runLogOpen" @close="runLogOpen = false" />
-      <WorkspacePanel v-if="workspaceOpen" :open="workspaceOpen" @close="workspaceOpen = false" />
-       <VersionPanel v-if="versionOpen" :open="versionOpen" @close="versionOpen = false" />
+      <!-- ★1012：互斥后"切面板"= 卸载旧的 + 挂载新的，原先直接跳变 ⇒ 用户反馈"很僵硬"。
+           用 Transition(out-in) 顺序切换：同一时刻只渲染一个面板（不会两个并存把 300px 容器挤变形），
+           包装层的 width 过渡保持不变。 -->
+      <Transition name="dock-switch" mode="out-in">
+        <RunLogPanel v-if="runLogOpen" :open="runLogOpen" @close="runLogOpen = false" />
+        <WorkspacePanel v-else-if="workspaceOpen" :open="workspaceOpen" @close="workspaceOpen = false" />
+        <VersionPanel v-else-if="versionOpen" :open="versionOpen" @close="versionOpen = false" />
+      </Transition>
     </div>
     </div><!-- /会话级主体行 -->
 
@@ -5011,4 +5043,9 @@ html.dark .empty-loading-modal {
     animation: none;
   }
 }
+/* ★1012：右栏面板互斥切换的过渡（out-in 顺序切换，所以只需要 enter/leave 两组类） */
+.dock-switch-enter-active { transition: opacity .18s ease, transform .18s ease; }
+.dock-switch-leave-active { transition: opacity .12s ease, transform .12s ease; }
+.dock-switch-enter-from { opacity: 0; transform: translateX(10px); }
+.dock-switch-leave-to { opacity: 0; transform: translateX(-6px); }
 </style>

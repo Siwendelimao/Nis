@@ -77,6 +77,29 @@ const blocks = computed(() => {
   font-size: 0.88em;
   color: var(--dsw-static-deepseek-500);
 }
+/* ★1012（老大需求）：正文里的**本地文件路径**渲染成可点击 chip ——
+   点击直接在资源管理器打开所在目录并选中该文件（与工具块 chip / 产出物同一条 fs.reveal 链路）。
+   样式刻意做"轻"：不加边框（那样看着像按钮、抢正文注意力），只用极淡底色 + hover 加深。 */
+.dsh-markdown :deep(.dsh-md-code--file) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0.02em 0.3em;
+  cursor: pointer;
+  border: 0;
+  transition: background .15s ease;
+}
+.dsh-markdown :deep(.dsh-md-code--file:hover) {
+  background: var(--dsw-static-neutral-bluish-60);
+}
+.dsh-markdown :deep(.dsh-md-code--file i) { font-size: 0.95em; line-height: 1; }
+.dsh-markdown :deep(.dsh-md-code--file .pfc-name) { color: inherit; }
+/* 单行围栏代码块里的路径（AI 习惯把路径单独放进代码块方便复制）：与行内同款，只保留一点上下边距 */
+.dsh-markdown :deep(.dsh-md-code--file-block) {
+  margin: 0.28em 0;
+  padding: 0.26em 0.55em;
+  font-size: 0.9em;
+}
 .dsh-markdown :deep(.dsh-md-fence) {
   margin: 0.7em 0;
   border-radius: 10px;
