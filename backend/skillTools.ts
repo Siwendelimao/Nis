@@ -142,13 +142,18 @@ let loadGen = 0
 export async function getSkills(): Promise<Skill[]> {
   const now = Date.now()
   if (now - cache.loadedAt < 60_000) return cache.skills
-  if (inFlight) return inFlight   // ★4.45：并发同刻只跑一次加载
+  /* ★1012 修（真因，实测 20 分钟不刷新）：原来这里是 `if (inFlight) return inFlight`
+     —— "同刻只加载一次"的 promise 复用有致命时序坑：scanSkills 全程同步，async IIFE 会在
+     **赋值给 inFlight 之前**就执行完，finally 先把 inFlight 置 null、随后这行赋值又把一个
+     已 resolve 的 promise 填回去 ⇒ inFlight 永久非 null，getSkills 从第二次调用起永远返回
+     第一次的清单，60s 过期形同虚设（表现为「新增/删除技能后必须重启后端才生效」）。
+     现在删掉复用：过期就重扫 —— scanSkills 本身同步、目录很小（<50ms），不存在并发竞态。 */
   const gen = ++loadGen
   inFlight = (async () => {
     try {
       if (!fs.existsSync(SKILLS_DIR)) {
         console.warn(`[skills] directory not found: ${SKILLS_DIR}（技能清单将为空）`)
-        if (gen === loadGen) cache = { skills: [], loadedAt: Date.now() }
+        cache = { skills: [], loadedAt: Date.now() }
         return []
       }
       try {
@@ -166,12 +171,12 @@ export async function getSkills(): Promise<Skill[]> {
           seen.add(k)
           return true
         })
-        if (gen === loadGen) cache = { skills: deduped, loadedAt: Date.now() }   // ★4.45：失效后的旧加载不许提交
+        cache = { skills: deduped, loadedAt: Date.now() }
         return deduped
       } catch (e) {
         console.error('[skills] load failed:', e)
         // ★ 0923：加载失败同样落空缓存，杜绝冷缓存 null 冒泡到调用方
-        if (gen === loadGen) cache = { skills: [], loadedAt: Date.now() }
+        cache = { skills: [], loadedAt: Date.now() }
         return []
       }
     } finally { inFlight = null }

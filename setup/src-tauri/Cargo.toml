@@ -1,6 +1,6 @@
 [package]
 name = "nis-setup"
-version = "1.1.4"
+version = "1.1.5"
 description = "NIS Setup - 自绘安装/卸载向导（无边框 WebView 壳，驱动内置 NSIS 引擎）"
 authors = ["NIS"]
 edition = "2021"

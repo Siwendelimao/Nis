@@ -13570,7 +13570,7 @@ async function dispatchMethod(method: string, payload: unknown): Promise<unknown
       const cfg = currentLlmConfig()
       /* ★ 0927 第 0 批：暴露数据根来源 + 降级文件清单 —— "设置还原默认"类问题排查第一步
          就是确认"读的是哪个目录"；降级清单让前端/排查者一眼看到哪些存储处于损坏保护状态。 */
-      return { version: '1.1.4-pi-bridge', cwd: process.cwd(), provider: cfg.providerId, model: cfg.model, attachedSessions: sessions.size, canOpenPath: false, dataRoot: DATA_ROOT, dataRootFromEnv: !!process.env.NIS_DATA_DIR, degradedFiles: degradedFiles() }
+      return { version: '1.1.5-pi-bridge', cwd: process.cwd(), provider: cfg.providerId, model: cfg.model, attachedSessions: sessions.size, canOpenPath: false, dataRoot: DATA_ROOT, dataRootFromEnv: !!process.env.NIS_DATA_DIR, degradedFiles: degradedFiles() }
     }
 
     /* ── 0915：前端 UI 状态持久化（**替代 localStorage**）──
@@ -17624,6 +17624,12 @@ async function dispatchMethod(method: string, payload: unknown): Promise<unknown
 
     // Skills（真实列表：backend/skills/ 目录 SKILL.md）
     case 'skill.list': {
+      /* ★1012：面板每次打开都强制重扫 —— 修「新增技能后必须重启后端才看得到」。
+         实测：新建 skills/nis-release/ 后，运行中的后端 skill.list 仍返回旧清单
+         （连"再建一个探针技能"也照样看不到），用户在「skill仓库」面板里就是找不到新技能。
+         getSkills() 自身有 60s 缓存 + invalidateSkillCache() 只被 install.uninstall 调用
+         ⇒ 面板这条路没有任何失效入口。这里先失效再取；技能目录很小（扫描 <50ms），代价可忽略。 */
+      invalidateSkillCache()
       const skillsAll = await getSkills()
       const _offSet = skillDisabledSet()
       return {
