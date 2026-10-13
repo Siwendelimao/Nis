@@ -8,6 +8,8 @@
 [简体中文](README.md) · **English**
 
 > **A self-hosted, local-first AI agent workbench** — long-term memory, a searchable knowledge base and a full toolchain (files, shell, browser, scheduled tasks). Desktop app + mobile web + optional QQ / WeChat bots, driven by your own model (OpenAI-compatible, local Ollama, or external agents via ACP).
+>
+> 🤖 **Fun fact: this repo maintains itself.** Issues, PR reviews and releases are handled by NIS itself — a human just presses the final button ✨
 
 NIS (Chinese: 纽斯) is not just another chat box. It brings together three things most AI clients lack: **it remembers you, it actually does the work, and you can reach it from anywhere.**
 
