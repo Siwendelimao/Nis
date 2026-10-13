@@ -22,7 +22,7 @@
     "fflate": "^0.8.3",
     "gsap": "^3.15.0",
     "katex": "^0.18.7",
-    "lucide-vue-next": "^0.475.0",
+    "lucide-vue-next": "^1.0.0",
     "mdast-util-from-markdown": "^2.0.3",
     "mdast-util-gfm": "^3.1.0",
     "mdast-util-math": "^3.0.0",

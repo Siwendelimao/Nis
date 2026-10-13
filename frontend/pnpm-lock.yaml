@@ -39,8 +39,8 @@ importers:
         specifier: ^0.18.7
         version: 0.18.7
       lucide-vue-next:
-        specifier: ^0.475.0
-        version: 0.475.0(vue@3.5.41)
+        specifier: ^1.0.0
+        version: 1.0.0(vue@3.5.41)
       mdast-util-from-markdown:
         specifier: ^2.0.3
         version: 2.0.3
@@ -1433,8 +1433,8 @@ packages:
   lop@0.4.2:
     resolution: {integrity: sha512-RefILVDQ4DKoRZsJ4Pj22TxE3omDO47yFpkIBoDKzkqPRISs5U1cnAdg/5583YPkWPaLIYHOKRMQSvjFsO26cw==}
 
-  lucide-vue-next@0.475.0:
-    resolution: {integrity: sha512-xzotVZV7en58Gm3b60YHlxX2YGlFWSN4D5VMMhU/rC9D/pkeRqve21TPMJdHQsdqFdoRthnaB2HrzL0PQXdNeA==}
+  lucide-vue-next@1.0.0:
+    resolution: {integrity: sha512-V6SPvx1IHTj/UY+FrIYWV5faISsPSb8BnWSFDxAtezWKvWc9ZZ40PDrdu1/Qb5vg4lHWr1hs1BAMGVGm6V1Xdg==}
     deprecated: Package deprecated. Please use @lucide/vue instead.
     peerDependencies:
       vue: '>=3.0.1'
@@ -3069,7 +3069,7 @@ snapshots:
       option: 0.2.4
       underscore: 1.13.8
 
-  lucide-vue-next@0.475.0(vue@3.5.41):
+  lucide-vue-next@1.0.0(vue@3.5.41):
     dependencies:
       vue: 3.5.41
 
