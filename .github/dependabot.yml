@@ -1,7 +1,7 @@
-# Dependabot 配置（1013 由 NIS 提交）
-# 目的：把安全修复与常规升级**分组**，避免"每个依赖一个 PR"刷屏。
-# 说明：安全更新由仓库设置里的 Dependabot Security Updates 触发（已开启）；
-#      本文件负责分组与 PR 数量上限，并顺带按周做常规版本更新。
+# Dependabot 配置（1013 由 NIS 提交，1013b 加 major 拦截）
+# 策略：① 安全更新成组（别一包一 PR）② 常规升级只放行 minor/patch 并成组
+#      ③ **大版本（major）一律不提 PR** —— 要人腾出时间测，不适合自动跟
+# 说明：安全更新由仓库设置里的 Dependabot Security Updates 触发（已开启），不受 open-pull-requests-limit 限制。
 version: 2
 updates:
   # 后端（npm，backend/package-lock.json）
@@ -17,6 +17,9 @@ updates:
       minor-and-patch:
         applies-to: version-updates
         update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   # 前端（pnpm 锁文件；Dependabot 用 npm 生态识别）
   - package-ecosystem: npm
@@ -31,8 +34,11 @@ updates:
       minor-and-patch:
         applies-to: version-updates
         update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
-  # 仓库根（pnpm 锁文件）
+  # 仓库根
   - package-ecosystem: npm
     directory: /
     schedule:
@@ -42,6 +48,9 @@ updates:
       security:
         applies-to: security-updates
         patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   # Tauri 壳（Rust）
   - package-ecosystem: cargo
@@ -52,6 +61,9 @@ updates:
     groups:
       all:
         patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: cargo
     directory: /setup/src-tauri
@@ -61,3 +73,6 @@ updates:
     groups:
       all:
         patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
