@@ -12,34 +12,34 @@
     "tauri:build": "tauri build"
   },
   "dependencies": {
-    "@open-file-viewer/core": "^0.1.42",
-    "@open-file-viewer/vue": "^0.1.42",
-    "@tauri-apps/api": "^2.3.0",
-    "@tauri-apps/plugin-dialog": "^2.2.0",
-    "@tauri-apps/plugin-notification": "^2.3.3",
+    "@open-file-viewer/core": "^0.1.49",
+    "@open-file-viewer/vue": "^0.1.49",
+    "@tauri-apps/api": "^2.12.2",
+    "@tauri-apps/plugin-dialog": "^2.8.1",
+    "@tauri-apps/plugin-notification": "^2.5.1",
     "@types/d3": "^7.4.3",
     "d3": "^7.9.0",
     "fflate": "^0.8.3",
     "gsap": "^3.15.0",
-    "katex": "^0.18.7",
+    "katex": "^0.19.0",
     "lucide-vue-next": "^0.475.0",
-    "mdast-util-from-markdown": "^2.0.3",
+    "mdast-util-from-markdown": "^2.1.0",
     "mdast-util-gfm": "^3.1.0",
     "mdast-util-math": "^3.0.0",
-    "mermaid": "^12.0.0",
+    "mermaid": "^12.1.0",
     "micromark-extension-gfm": "^3.0.0",
     "micromark-extension-math": "^3.1.0",
-    "pdfjs-dist": "^6.2.108",
+    "pdfjs-dist": "^6.4.299",
     "pinia": "^3.0.2",
     "prismjs": "^1.30.0",
-    "three": "0.128.0",
-    "vue": "^3.5.13"
+    "three": "0.186.1",
+    "vue": "^3.5.43"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.7",
-    "@tauri-apps/cli": "^2.3.1",
+    "@tauri-apps/cli": "^2.12.1",
     "@vitejs/plugin-vue": "^5.2.3",
     "tailwindcss": "^4.1.7",
-    "vite": "^6.2.5"
+    "vite": "^6.4.4"
   }
 }
