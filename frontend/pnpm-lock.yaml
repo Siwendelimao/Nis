@@ -82,8 +82,8 @@ importers:
         specifier: ^2.3.1
         version: 2.11.4
       '@vitejs/plugin-vue':
-        specifier: ^5.2.3
-        version: 5.2.4(vite@6.4.3(jiti@2.7.0)(lightningcss@1.32.0))(vue@3.5.41)
+        specifier: ^6.0.9
+        version: 6.0.9(vite@6.4.3(jiti@2.7.0)(lightningcss@1.32.0))(vue@3.5.41)
       tailwindcss:
         specifier: ^4.1.7
         version: 4.3.3
@@ -442,6 +442,9 @@ packages:
     peerDependencies:
       '@open-file-viewer/core': 0.1.42
       vue: '>=3'
+
+  '@rolldown/pluginutils@1.0.1':
+    resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
 
   '@rollup/rollup-android-arm-eabi@4.62.4':
     resolution: {integrity: sha512-RrPokAb7dmbxFoeO3TloqHyOjgye8RkBhSqmp4aJMIex4c9r46ZstPnleDQOq1t46VOVjwIuwNogIqbodV1Vvg==}
@@ -883,11 +886,11 @@ packages:
   '@upsetjs/venn.js@2.0.0':
     resolution: {integrity: sha512-WbBhLrooyePuQ1VZxrJjtLvTc4NVfpOyKx0sKqioq9bX1C1m7Jgykkn8gLrtwumBioXIqam8DLxp88Adbue6Hw==}
 
-  '@vitejs/plugin-vue@5.2.4':
-    resolution: {integrity: sha512-7Yx/SXSOcQq5HiiV3orevHUFn+pmMB4cgbEkDYgnkUWb0WfeQ/wa2yFv6D5ICiCQOVpjA7vYDXrC7AGO8yjDHA==}
-    engines: {node: ^18.0.0 || >=20.0.0}
+  '@vitejs/plugin-vue@6.0.9':
+    resolution: {integrity: sha512-rD/MORlhaZMlXWW0rEn4FB4wMinWC0z/D7Ye160S5+Rs1mC8ZDAdcDp4SjKfUhG5t8q1ktcPVw4xuTkPRlzrSA==}
+    engines: {node: ^20.19.0 || >=22.12.0}
     peerDependencies:
-      vite: ^5.0.0 || ^6.0.0
+      vite: ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0
       vue: ^3.2.25
 
   '@vue/compiler-core@3.5.41':
@@ -2159,6 +2162,8 @@ snapshots:
       '@open-file-viewer/core': 0.1.42(lodash-es@4.18.1)(pdfjs-dist@6.2.108)
       vue: 3.5.41
 
+  '@rolldown/pluginutils@1.0.1': {}
+
   '@rollup/rollup-android-arm-eabi@4.62.4':
     optional: true
 
@@ -2506,8 +2511,9 @@ snapshots:
       d3-selection: 3.0.0
       d3-transition: 3.0.1(d3-selection@3.0.0)
 
-  '@vitejs/plugin-vue@5.2.4(vite@6.4.3(jiti@2.7.0)(lightningcss@1.32.0))(vue@3.5.41)':
+  '@vitejs/plugin-vue@6.0.9(vite@6.4.3(jiti@2.7.0)(lightningcss@1.32.0))(vue@3.5.41)':
     dependencies:
+      '@rolldown/pluginutils': 1.0.1
       vite: 6.4.3(jiti@2.7.0)(lightningcss@1.32.0)
       vue: 3.5.41
 
