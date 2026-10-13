@@ -127,6 +127,8 @@ Special notes: UI animations use GSAP (GreenSock's custom "no charge" license �
 
 NIS was built by **斯文的狸猫 (Siwendelimao)** together with an AI assistant named **Nis** — the human makes the calls (scope, architecture, trade-offs, acceptance), while the AI does a large share of the implementation, debugging and documentation. **The project is named after that collaborator.**
 
+It now runs this repository day to day as well: issue replies, PR handling, releases and outbound email are all handled by NIS itself — for full transparency, it's an AI, and a human still makes the final calls. Want to reach the project? Just email it 📮 **nis1010@agent.qq.com**
+
 ## Credits
 
 Thanks to every open-source author. Without the Vue, Tauri, Node and Python ecosystems, this project would not exist.
