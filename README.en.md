@@ -7,7 +7,7 @@
 
 [简体中文](README.md) · **English**
 
-> **With you, I can do anything.**
+> **有你在，我将无所不能。** *With you, I can do anything.*
 >
 > **A self-hosted, local-first AI agent workbench** — long-term memory, a searchable knowledge base and a full toolchain (files, shell, browser, scheduled tasks). Desktop app + mobile web + optional QQ / WeChat bots, driven by your own model (OpenAI-compatible, local Ollama, or external agents via ACP).
 >
