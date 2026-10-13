@@ -1,0 +1,63 @@
+# Dependabot 配置（1013 由 NIS 提交）
+# 目的：把安全修复与常规升级**分组**，避免"每个依赖一个 PR"刷屏。
+# 说明：安全更新由仓库设置里的 Dependabot Security Updates 触发（已开启）；
+#      本文件负责分组与 PR 数量上限，并顺带按周做常规版本更新。
+version: 2
+updates:
+  # 后端（npm，backend/package-lock.json）
+  - package-ecosystem: npm
+    directory: /backend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+      minor-and-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+
+  # 前端（pnpm 锁文件；Dependabot 用 npm 生态识别）
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+      minor-and-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+
+  # 仓库根（pnpm 锁文件）
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  # Tauri 壳（Rust）
+  - package-ecosystem: cargo
+    directory: /frontend/src-tauri
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      all:
+        patterns: ["*"]
+
+  - package-ecosystem: cargo
+    directory: /setup/src-tauri
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      all:
+        patterns: ["*"]
