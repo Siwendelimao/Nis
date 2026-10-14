@@ -12,10 +12,10 @@
     "@agentclientprotocol/codex-acp": "^2.1.1",
     "@earendil-works/pi-agent-core": "1.1.0",
     "@earendil-works/pi-ai": "1.1.0",
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "playwright-core": "^1.62.1",
     "qrcode": "^1.5.4",
-    "undici": "^8.10.1",
+    "undici": "^8.11.2",
     "ws": "^8.18.0"
   },
   "devDependencies": {
